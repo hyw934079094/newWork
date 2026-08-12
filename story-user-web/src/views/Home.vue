@@ -1,0 +1,2 @@
+<script setup lang="ts">import { onMounted, ref } from 'vue'; const online=ref(false); onMounted(async()=>{try{online.value=(await fetch('/api/health')).ok}catch{online.value=false}})</script>
+<template><section class="hero"><p class="eyebrow">插图与文字故事阅读空间</p><h2>每一页，都通往另一个世界。</h2><p>这里将展示可筛选、可预览的故事，并提供沉浸式图文阅读体验。</p><span class="status">后端状态：{{ online ? '已连接' : '等待启动' }}</span></section></template>
