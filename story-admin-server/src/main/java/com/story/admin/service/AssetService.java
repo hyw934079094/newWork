@@ -17,6 +17,7 @@ import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.AssetTagRelRepository;
 import com.story.admin.repository.AssetTagRepository;
 import com.story.admin.repository.CharacterProfileRepository;
+import com.story.admin.repository.IdentityAssetRelRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -48,6 +49,7 @@ public class AssetService {
   private final CharacterProfileRepository characterProfileRepository;
   private final AiReferenceItemRepository aiReferenceItemRepository;
   private final AssetComboMemberRepository comboMemberRepository;
+  private final IdentityAssetRelRepository identityAssetRelRepository;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -58,7 +60,8 @@ public class AssetService {
       AssetCharacterRelRepository characterRelRepository,
       CharacterProfileRepository characterProfileRepository,
       AiReferenceItemRepository aiReferenceItemRepository,
-      AssetComboMemberRepository comboMemberRepository) {
+      AssetComboMemberRepository comboMemberRepository,
+      IdentityAssetRelRepository identityAssetRelRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -68,6 +71,7 @@ public class AssetService {
     this.characterProfileRepository = characterProfileRepository;
     this.aiReferenceItemRepository = aiReferenceItemRepository;
     this.comboMemberRepository = comboMemberRepository;
+    this.identityAssetRelRepository = identityAssetRelRepository;
   }
 
   @Transactional
@@ -179,8 +183,9 @@ public class AssetService {
     List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(id);
     List<AiReferenceItem> aiRefs = aiReferenceItemRepository.findByAssetId(id);
     List<String> comboNames = comboMemberRepository.findComboNamesByAssetId(id);
-    if (!characterIds.isEmpty() || !aiRefs.isEmpty() || !comboNames.isEmpty()) {
-      throw new ConflictException(buildReferenceSummary(characterIds, aiRefs, comboNames));
+    List<String> identityNames = identityAssetRelRepository.findIdentityNamesByAssetId(id);
+    if (!characterIds.isEmpty() || !aiRefs.isEmpty() || !comboNames.isEmpty() || !identityNames.isEmpty()) {
+      throw new ConflictException(buildReferenceSummary(characterIds, aiRefs, comboNames, identityNames));
     }
     tagRelRepository.deleteByAssetId(id);
     characterRelRepository.deleteByAssetId(id);
@@ -353,7 +358,10 @@ public class AssetService {
   }
 
   private String buildReferenceSummary(
-      List<Long> characterIds, List<AiReferenceItem> aiRefs, List<String> comboNames) {
+      List<Long> characterIds,
+      List<AiReferenceItem> aiRefs,
+      List<String> comboNames,
+      List<String> identityNames) {
     StringBuilder sb = new StringBuilder("无法彻底删除：仍存在引用。");
     if (!characterIds.isEmpty()) {
       Map<Long, CharacterProfile> byId =
@@ -387,6 +395,9 @@ public class AssetService {
     }
     if (!comboNames.isEmpty()) {
       sb.append(" 组合引用: [").append(String.join(", ", comboNames)).append("].");
+    }
+    if (!identityNames.isEmpty()) {
+      sb.append(" 本体引用: [").append(String.join(", ", identityNames)).append("].");
     }
     return sb.toString();
   }
