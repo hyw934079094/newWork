@@ -13,10 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import javax.imageio.ImageIO;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -69,6 +71,74 @@ class AssetServiceTest {
     assertThatThrownBy(() -> categoryService.delete(preset.getId()))
         .isInstanceOf(ResponseStatusException.class)
         .hasMessageContaining("400");
+  }
+
+  @Test
+  void uploadRejectsUnsupportedExtension(@TempDir Path dir) {
+    configService.upsert("storage.root", dir.toAbsolutePath().toString(), "test");
+    AssetCategory category = persistCategory("scene", "场景", 2, false);
+    MockMultipartFile file =
+        new MockMultipartFile("files", "readme.txt", "text/plain", "hello".getBytes());
+
+    assertThatThrownBy(() -> assetService.upload(category.getId(), new MockMultipartFile[] {file}))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            ex -> {
+              ResponseStatusException rse = (ResponseStatusException) ex;
+              assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+              assertThat(rse.getReason()).contains("unsupported file type");
+              assertThat(rse.getReason()).contains("txt");
+            });
+  }
+
+  @Nested
+  @SpringBootTest
+  @ActiveProfiles("test")
+  @TestPropertySource(
+      properties = {
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.datasource.url=jdbc:h2:mem:story_admin_asset_oversize_test;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "story.storage.root=../storage",
+        "story.upload.max-file-size-mb=0"
+      })
+  class OversizeUploadTest {
+
+    @Autowired AssetService assetService;
+    @Autowired ConfigService configService;
+    @Autowired AssetCategoryRepository categoryRepository;
+
+    @Test
+    void uploadRejectsOversizeFile(@TempDir Path dir) throws Exception {
+      configService.upsert("storage.root", dir.toAbsolutePath().toString(), "test");
+      AssetCategory category = persistCategory("bg", "背景", 3, false);
+      MockMultipartFile file =
+          new MockMultipartFile("files", "dot.png", "image/png", oneByOnePng());
+
+      assertThatThrownBy(() -> assetService.upload(category.getId(), new MockMultipartFile[] {file}))
+          .isInstanceOf(ResponseStatusException.class)
+          .satisfies(
+              ex -> {
+                ResponseStatusException rse = (ResponseStatusException) ex;
+                assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                assertThat(rse.getReason()).contains("max size");
+                assertThat(rse.getReason()).contains("0MB");
+              });
+    }
+
+    private AssetCategory persistCategory(
+        String code, String name, int sortOrder, boolean systemPreset) {
+      AssetCategory category = new AssetCategory();
+      category.setCode(code);
+      category.setName(name);
+      category.setSortOrder(sortOrder);
+      category.setSystemPreset(systemPreset);
+      return categoryRepository.save(category);
+    }
   }
 
   private AssetCategory persistCategory(
