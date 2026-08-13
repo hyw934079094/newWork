@@ -1,11 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
 import SysConfig from '../views/config/SysConfig.vue';
+import CharacterList from '../views/characters/CharacterList.vue';
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'dashboard', component: Dashboard },
+    { path: '/characters', name: 'characters', component: CharacterList },
     { path: '/config', name: 'sys-config', component: SysConfig },
   ],
 });
