@@ -8,8 +8,16 @@
         <div class="nav-group">
           <div class="nav-group-title">素材管理</div>
           <div class="nav-children">
-            <RouterLink to="/assets">工作台</RouterLink>
-            <RouterLink to="/assets/categories">管理配置</RouterLink>
+            <RouterLink
+              to="/assets"
+              active-class=""
+              exact-active-class="router-link-active"
+            >工作台</RouterLink>
+            <RouterLink
+              to="/assets/categories"
+              active-class=""
+              exact-active-class="router-link-active"
+            >管理配置</RouterLink>
             <RouterLink to="/assets/combos">组合编排</RouterLink>
           </div>
         </div>

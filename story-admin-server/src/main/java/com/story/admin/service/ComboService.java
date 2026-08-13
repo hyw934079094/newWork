@@ -4,6 +4,7 @@ import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCombo;
 import com.story.admin.domain.AssetComboMember;
 import com.story.admin.domain.AssetComboStepHold;
+import com.story.admin.domain.AssetStatus;
 import com.story.admin.dto.ComboDetailResponse;
 import com.story.admin.dto.ComboMemberRequest;
 import com.story.admin.dto.ComboStepHoldRequest;
@@ -105,9 +106,16 @@ public class ComboService {
         throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST, "duplicate assetId in members: " + member.assetId());
       }
-      if (!assetRepository.existsById(member.assetId())) {
+      Asset asset =
+          assetRepository
+              .findById(member.assetId())
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.BAD_REQUEST, "asset not found: " + member.assetId()));
+      if (asset.getStatus() != AssetStatus.NORMAL) {
         throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST, "asset not found: " + member.assetId());
+            HttpStatus.BAD_REQUEST, "asset is not available: " + member.assetId());
       }
       assetIds.add(member.assetId());
     }

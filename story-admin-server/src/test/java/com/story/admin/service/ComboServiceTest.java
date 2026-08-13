@@ -1,5 +1,6 @@
 package com.story.admin.service;
 
+import static com.story.admin.domain.AssetStatus.DELETED;
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,6 +48,32 @@ class ComboServiceTest {
   @Autowired AssetComboRepository comboRepository;
   @Autowired AssetComboMemberRepository memberRepository;
   @Autowired AssetComboStepHoldRepository stepHoldRepository;
+
+  @Test
+  void rejectsNonNormalMemberAsset() {
+    Asset deleted = persistAsset("combo-deleted");
+    deleted.setStatus(DELETED);
+    deleted = assetRepository.save(deleted);
+
+    ComboUpsertRequest req =
+        new ComboUpsertRequest(
+            "deleted-member",
+            "1",
+            new BigDecimal("1.0"),
+            true,
+            null,
+            List.of(new ComboMemberRequest(deleted.getId(), 1)),
+            List.of());
+
+    assertThatThrownBy(() -> comboService.create(req))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            ex -> {
+              ResponseStatusException rse = (ResponseStatusException) ex;
+              assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+              assertThat(rse.getReason()).contains("asset is not available");
+            });
+  }
 
   @Test
   void rejectsPlaySequenceWithUnknownMemberNo() {
