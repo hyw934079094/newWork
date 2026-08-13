@@ -13,13 +13,7 @@ import {
   type AssetItem,
 } from '../../api/asset';
 import { useRouter } from 'vue-router';
-import {
-  createCategory,
-  deleteCategory,
-  listCategories,
-  updateCategory,
-  type AssetCategoryItem,
-} from '../../api/category';
+import { listCategories, type AssetCategoryItem } from '../../api/category';
 import { listCharacters, type CharacterItem } from '../../api/character';
 
 const router = useRouter();
@@ -117,14 +111,6 @@ async function onDropOnCategory(categoryId: number, evt: DragChangeEvent) {
   }
 }
 
-const categoryDialogVisible = ref(false);
-const categoryEditing = ref(false);
-const categoryForm = reactive({
-  id: null as number | null,
-  code: '',
-  name: '',
-});
-
 const characters = ref<CharacterItem[]>([]);
 
 const form = reactive({
@@ -218,72 +204,6 @@ async function selectCategory(id: number) {
   if (Date.now() - dragEndedAt < 300) return;
   selectedCategoryId.value = id;
   await loadAssets();
-}
-
-function openCreateCategory() {
-  categoryEditing.value = false;
-  categoryForm.id = null;
-  categoryForm.code = '';
-  categoryForm.name = '';
-  categoryDialogVisible.value = true;
-}
-
-function openEditCategory(row: AssetCategoryItem) {
-  categoryEditing.value = true;
-  categoryForm.id = row.id;
-  categoryForm.code = row.code;
-  categoryForm.name = row.name;
-  categoryDialogVisible.value = true;
-}
-
-async function submitCategory() {
-  if (!categoryForm.name.trim()) {
-    ElMessage.warning('请填写分类名称');
-    return;
-  }
-  if (!categoryEditing.value && !categoryForm.code.trim()) {
-    ElMessage.warning('请填写分类编码');
-    return;
-  }
-  try {
-    if (categoryEditing.value && categoryForm.id != null) {
-      const updated = await updateCategory(categoryForm.id, { name: categoryForm.name.trim() });
-      ElMessage.success('分类已更新');
-      categoryDialogVisible.value = false;
-      await loadCategories(updated.id);
-    } else {
-      const created = await createCategory({
-        code: categoryForm.code.trim(),
-        name: categoryForm.name.trim(),
-      });
-      ElMessage.success('分类已新增');
-      categoryDialogVisible.value = false;
-      await loadCategories(created.id);
-      await loadAssets();
-    }
-  } catch (e) {
-    ElMessage.error(apiError(e, '保存分类失败'));
-  }
-}
-
-async function removeCategory(row: AssetCategoryItem) {
-  if (row.systemPreset) {
-    ElMessage.warning('预置分类不可删除');
-    return;
-  }
-  try {
-    await ElMessageBox.confirm(`确认删除分类「${row.name}」？`, '删除确认', { type: 'warning' });
-    await deleteCategory(row.id);
-    ElMessage.success('已删除分类');
-    if (selectedCategoryId.value === row.id) {
-      selectedCategoryId.value = null;
-    }
-    await loadCategories();
-    await loadAssets();
-  } catch (e) {
-    if (e === 'cancel' || e === 'close') return;
-    ElMessage.error(apiError(e, '删除分类失败'));
-  }
 }
 
 function triggerUpload() {
@@ -442,49 +362,41 @@ onMounted(async () => {
     </header>
 
     <div class="layout">
-      <aside class="pane categories">
+      <div class="pane categories">
         <div class="pane-head">
           <strong>分类</strong>
-          <el-button link type="primary" @click="openCreateCategory">新增</el-button>
+          <el-button link type="primary" @click="router.push('/assets/categories')">去配置</el-button>
         </div>
         <ul>
-          <draggable
-            v-for="cat in categories"
-            :key="cat.id"
-            tag="li"
-            :list="bucketFor(cat.id)"
-            item-key="id"
-            :group="categoryGroup"
-            :animation="150"
-            :empty-insert-threshold="48"
-            class="category-drop"
-            :class="{ active: cat.id === selectedCategoryId, 'drop-ready': dragging }"
-            @change="onDropOnCategory(cat.id, $event)"
-            @click="selectCategory(cat.id)"
-          >
-            <template #header>
-              <div class="cat-row">
-                <span class="cat-name">{{ cat.name }}</span>
-                <span class="cat-actions" @click.stop>
-                  <el-button link type="primary" @click="openEditCategory(cat)">改名</el-button>
-                  <el-button
-                    v-if="!cat.systemPreset"
-                    link
-                    type="danger"
-                    @click="removeCategory(cat)"
-                  >
-                    删
-                  </el-button>
-                </span>
-              </div>
-            </template>
-            <template #item="{ element }">
-              <span class="drop-chip">{{ element.displayName }}</span>
-            </template>
-          </draggable>
+          <li v-for="cat in categories" :key="cat.id">
+            <draggable
+              :list="bucketFor(cat.id)"
+              item-key="id"
+              :group="categoryGroup"
+              :animation="150"
+              :empty-insert-threshold="48"
+              class="category-drop"
+              :class="{ active: cat.id === selectedCategoryId, 'drop-ready': dragging }"
+              @change="onDropOnCategory(cat.id, $event)"
+              @click="selectCategory(cat.id)"
+            >
+              <template #header>
+                <div class="cat-row">
+                  <span class="cat-name">{{ cat.name }}</span>
+                </div>
+              </template>
+              <template #item="{ element }">
+                <span class="drop-chip">{{ element.displayName }}</span>
+              </template>
+            </draggable>
+          </li>
         </ul>
-        <p v-if="!categories.length" class="empty">暂无分类</p>
-      </aside>
+        <p v-if="!categories.length" class="empty">
+          暂无分类，请先到
+          <el-button link type="primary" @click="router.push('/assets/categories')">管理配置</el-button>
+          新增
+        </p>
+      </div>
 
       <section v-loading="loading" class="pane preview">
         <div v-if="currentAsset" class="preview-main">
@@ -536,7 +448,7 @@ onMounted(async () => {
         </draggable>
       </section>
 
-      <aside class="pane editor">
+      <div class="pane editor">
         <div class="pane-head"><strong>属性</strong></div>
         <template v-if="currentAsset">
           <el-form label-position="top">
@@ -597,27 +509,9 @@ onMounted(async () => {
           </div>
         </template>
         <p v-else class="empty">选中素材后可编辑名称与说明</p>
-      </aside>
+      </div>
     </div>
 
-    <el-dialog
-      v-model="categoryDialogVisible"
-      :title="categoryEditing ? '编辑分类' : '新增分类'"
-      width="420px"
-    >
-      <el-form label-width="88px">
-        <el-form-item label="编码" required>
-          <el-input v-model="categoryForm.code" :disabled="categoryEditing" placeholder="如 location" />
-        </el-form-item>
-        <el-form-item label="名称" required>
-          <el-input v-model="categoryForm.name" placeholder="如 地点" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="categoryDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitCategory">保存</el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
@@ -700,13 +594,13 @@ onMounted(async () => {
   display: none;
 }
 .cat-name {
+  color: #172033;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cat-actions {
-  display: flex;
-  flex-shrink: 0;
+.category-drop.active .cat-name {
+  color: #3b5bcc;
 }
 .preview {
   display: flex;

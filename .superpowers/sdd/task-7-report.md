@@ -63,7 +63,7 @@ BUILD SUCCESS
 
 | SHA | Message |
 |-----|---------|
-| （本任务） | `docs: record asset combo runbook and acceptance` |
+| `dbbdee3` | `docs: record asset combo runbook and acceptance` |
 
 仅暂存 README / docs（combo 设计·计划）/ `.superpowers/sdd` 验收产物；**不**包含 character WIP 及其它无关改动。
 

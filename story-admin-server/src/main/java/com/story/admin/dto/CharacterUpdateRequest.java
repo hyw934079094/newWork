@@ -7,5 +7,6 @@ public record CharacterUpdateRequest(
     String ageStage,
     String race,
     String occupation,
+    String storyName,
     String publicIntro,
     String internalNote) {}

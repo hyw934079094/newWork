@@ -39,6 +39,9 @@ public class CharacterProfile {
   @Column(length = 100)
   private String occupation;
 
+  @Column(name = "story_name", length = 200)
+  private String storyName;
+
   @Column(name = "public_intro", columnDefinition = "TEXT")
   private String publicIntro;
 
@@ -125,6 +128,14 @@ public class CharacterProfile {
 
   public void setOccupation(String occupation) {
     this.occupation = occupation;
+  }
+
+  public String getStoryName() {
+    return storyName;
+  }
+
+  public void setStoryName(String storyName) {
+    this.storyName = storyName;
   }
 
   public String getPublicIntro() {

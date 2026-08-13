@@ -12,7 +12,11 @@ public interface AssetCharacterRelRepository
 
   void deleteByAssetId(Long assetId);
 
+  void deleteByCharacterId(Long characterId);
+
   List<AssetCharacterRel> findByAssetId(Long assetId);
+
+  List<AssetCharacterRel> findByCharacterId(Long characterId);
 
   @Query(
       """

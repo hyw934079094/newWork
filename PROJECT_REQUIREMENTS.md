@@ -337,6 +337,7 @@ AI 生成文字、插图及未来的视频
 - **数据库**：MySQL（本机实例）。库名 `story_admin`；连接账号写入本地 `application.yml`（勿提交密钥）。
 - **文件存储（首期）**：项目路径下 `storage/`（不接对象存储）。数据库只保存相对路径与元数据；后续若迁移 OSS，仅替换存储实现与路径前缀。
 - **素材模块设计**：见 [`docs/superpowers/specs/2026-08-13-asset-module-design.md`](docs/superpowers/specs/2026-08-13-asset-module-design.md)。
+- **组合编排设计**：见 [`docs/superpowers/specs/2026-08-13-asset-combo-design.md`](docs/superpowers/specs/2026-08-13-asset-combo-design.md)。
 
 ## 9. 尚未确定的事项
 

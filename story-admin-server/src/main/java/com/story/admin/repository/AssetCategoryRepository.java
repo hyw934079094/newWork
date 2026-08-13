@@ -10,6 +10,8 @@ public interface AssetCategoryRepository extends JpaRepository<AssetCategory, Lo
 
   boolean existsByCode(String code);
 
+  Optional<AssetCategory> findByCode(String code);
+
   List<AssetCategory> findAllByOrderBySortOrderAscIdAsc();
 
   @Query("select coalesce(max(c.sortOrder), -1) from AssetCategory c")

@@ -9,6 +9,7 @@ import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
+import com.story.admin.dto.CharacterQuery;
 import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
@@ -48,9 +49,33 @@ class CharacterServiceTest {
     CharacterProfile c =
         characterService.create(
             new CharacterCreateRequest(
-                "女怪盗", null, "女", "青年", "人类", "怪盗", "公开简介", "内部说明"));
+                "女怪盗", null, "女", "青年", "人类", "怪盗", "暗夜物语", "公开简介", "内部说明"));
     assertThat(c.getCode()).startsWith("C");
     assertThat(c.getName()).isEqualTo("女怪盗");
+    assertThat(c.getStoryName()).isEqualTo("暗夜物语");
+  }
+
+  @Test
+  void listFiltersByNameStoryAndGender() {
+    characterService.create(
+        new CharacterCreateRequest("女怪盗", "面具", "女", "青年", "人类", "怪盗", "暗夜物语", null, null));
+    characterService.create(
+        new CharacterCreateRequest("剑客阿郎", null, "男", "青年", "人类", "剑客", "江湖录", null, null));
+    characterService.create(
+        new CharacterCreateRequest("精灵祭司", null, "女", "成年", "精灵", "祭司", "暗夜物语", null, null));
+
+    assertThat(characterService.list(new CharacterQuery("怪盗", null, null, null, null, null)))
+        .extracting(CharacterProfile::getName)
+        .containsExactly("女怪盗");
+    assertThat(characterService.list(new CharacterQuery(null, "暗夜", null, null, null, null)))
+        .extracting(CharacterProfile::getName)
+        .containsExactlyInAnyOrder("女怪盗", "精灵祭司");
+    assertThat(characterService.list(new CharacterQuery(null, null, "女", null, null, null)))
+        .extracting(CharacterProfile::getName)
+        .containsExactlyInAnyOrder("女怪盗", "精灵祭司");
+    assertThat(characterService.list(new CharacterQuery(null, "暗夜", "女", null, "精灵", null)))
+        .extracting(CharacterProfile::getName)
+        .containsExactly("精灵祭司");
   }
 
   @Test
@@ -58,7 +83,7 @@ class CharacterServiceTest {
     Long assetId = persistAsset("char-delete-linked").getId();
     CharacterProfile character =
         characterService.create(
-            new CharacterCreateRequest("引用角色", null, null, null, null, null, null, null));
+            new CharacterCreateRequest("引用角色", null, null, null, null, null, null, null, null));
     assetService.update(
         assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
 
