@@ -74,6 +74,10 @@ function onDragEnd() {
 
 async function onThumbsChange(evt: DragChangeEvent) {
   if (!evt.moved || selectedCategoryId.value == null) return;
+  if (isSearchActive.value) {
+    restoreDragSnapshot();
+    return;
+  }
   try {
     await reorderAssets({
       categoryId: selectedCategoryId.value,
@@ -135,6 +139,7 @@ const canPrev = computed(() => currentIndex.value > 0);
 const canNext = computed(
   () => currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1,
 );
+const isSearchActive = computed(() => search.value.trim().length > 0);
 
 function apiError(e: unknown, fallback: string): string {
   const err = e as { response?: { data?: { message?: string } } };
@@ -466,10 +471,14 @@ onMounted(async () => {
           </div>
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
+        <p v-if="isSearchActive" class="search-reorder-hint">
+          搜索状态下不可在本分类内排序；清空搜索后可拖拽排序，仍可将素材拖到左侧其它分类。
+        </p>
         <draggable
           v-model="assets"
           item-key="id"
           :group="thumbGroup"
+          :sort="!isSearchActive"
           :animation="150"
           class="thumbs"
           ghost-class="thumb-ghost"
@@ -660,6 +669,12 @@ onMounted(async () => {
 .empty {
   color: #6f7e9d;
   padding: 24px 8px;
+}
+.search-reorder-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #9aa8d9;
+  line-height: 1.5;
 }
 .thumbs {
   display: flex;
