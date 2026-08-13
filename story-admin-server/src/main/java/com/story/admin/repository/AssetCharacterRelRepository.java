@@ -21,4 +21,12 @@ public interface AssetCharacterRelRepository
       order by r.characterId
       """)
   List<Long> findCharacterIdsByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select r.assetId from AssetCharacterRel r
+      where r.characterId = :characterId
+      order by r.assetId
+      """)
+  List<Long> findAssetIdsByCharacterId(@Param("characterId") Long characterId);
 }

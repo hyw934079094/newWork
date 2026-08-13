@@ -3,8 +3,11 @@ package com.story.admin.service;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.CharacterUpdateRequest;
+import com.story.admin.exception.ConflictException;
+import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.CharacterProfileRepository;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,9 +17,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class CharacterService {
 
   private final CharacterProfileRepository repo;
+  private final AssetCharacterRelRepository characterRelRepository;
 
-  public CharacterService(CharacterProfileRepository repo) {
+  public CharacterService(
+      CharacterProfileRepository repo, AssetCharacterRelRepository characterRelRepository) {
     this.repo = repo;
+    this.characterRelRepository = characterRelRepository;
   }
 
   public List<CharacterProfile> list() {
@@ -73,7 +79,20 @@ public class CharacterService {
     if (!repo.existsById(id)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "character not found: " + id);
     }
+    List<Long> assetIds = characterRelRepository.findAssetIdsByCharacterId(id);
+    if (!assetIds.isEmpty()) {
+      throw new ConflictException(buildLinkedAssetSummary(assetIds));
+    }
     repo.deleteById(id);
+  }
+
+  private static String buildLinkedAssetSummary(List<Long> assetIds) {
+    String ids = assetIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+    return "无法删除人物：仍存在素材关联。关联素材("
+        + assetIds.size()
+        + "): ["
+        + ids
+        + "].";
   }
 
   private void applyFields(

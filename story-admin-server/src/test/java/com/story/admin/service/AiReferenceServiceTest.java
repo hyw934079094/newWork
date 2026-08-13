@@ -2,6 +2,7 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.AiReferenceItem;
 import com.story.admin.domain.Asset;
@@ -13,9 +14,11 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest
 @Transactional
@@ -50,6 +53,32 @@ class AiReferenceServiceTest {
     assertThat(aiReferenceService.getCurrent().getItems())
         .extracting(AiReferenceItem::getAssetId)
         .containsExactly(a1, a2);
+  }
+
+  @Test
+  void replaceItemsRejectsUnknownAssetId() {
+    assertThatThrownBy(
+            () ->
+                aiReferenceService.replaceCurrentItems(
+                    List.of(new AiReferenceItemRequest(9_999_999L, "外貌", null, null))))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            ex ->
+                assertThat(((ResponseStatusException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.BAD_REQUEST));
+  }
+
+  @Test
+  void replaceItemsRejectsNullAssetId() {
+    assertThatThrownBy(
+            () ->
+                aiReferenceService.replaceCurrentItems(
+                    List.of(new AiReferenceItemRequest(null, "外貌", null, null))))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            ex ->
+                assertThat(((ResponseStatusException) ex).getStatusCode())
+                    .isEqualTo(HttpStatus.BAD_REQUEST));
   }
 
   private Asset persistAsset(String name) {

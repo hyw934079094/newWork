@@ -5,10 +5,13 @@ import com.story.admin.domain.AiReferenceSession;
 import com.story.admin.dto.AiReferenceItemRequest;
 import com.story.admin.repository.AiReferenceItemRepository;
 import com.story.admin.repository.AiReferenceSessionRepository;
+import com.story.admin.repository.AssetRepository;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AiReferenceService {
@@ -17,11 +20,15 @@ public class AiReferenceService {
 
   private final AiReferenceSessionRepository sessionRepository;
   private final AiReferenceItemRepository itemRepository;
+  private final AssetRepository assetRepository;
 
   public AiReferenceService(
-      AiReferenceSessionRepository sessionRepository, AiReferenceItemRepository itemRepository) {
+      AiReferenceSessionRepository sessionRepository,
+      AiReferenceItemRepository itemRepository,
+      AssetRepository assetRepository) {
     this.sessionRepository = sessionRepository;
     this.itemRepository = itemRepository;
+    this.assetRepository = assetRepository;
   }
 
   @Transactional
@@ -34,11 +41,19 @@ public class AiReferenceService {
   @Transactional
   public AiReferenceSession replaceCurrentItems(List<AiReferenceItemRequest> requests) {
     AiReferenceSession session = ensureDefaultSession();
+    List<AiReferenceItemRequest> items = requests != null ? requests : List.of();
+    for (AiReferenceItemRequest req : items) {
+      Long assetId = req == null ? null : req.assetId();
+      if (assetId == null || !assetRepository.existsById(assetId)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "asset not found: " + assetId);
+      }
+    }
+
     itemRepository.deleteBySessionId(session.getId());
     itemRepository.flush();
 
     List<AiReferenceItem> saved = new ArrayList<>();
-    List<AiReferenceItemRequest> items = requests != null ? requests : List.of();
     for (int i = 0; i < items.size(); i++) {
       AiReferenceItemRequest req = items.get(i);
       AiReferenceItem item = new AiReferenceItem();
