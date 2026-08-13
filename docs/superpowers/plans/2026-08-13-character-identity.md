@@ -257,11 +257,11 @@ git commit -m "feat: character list identity column and add-form dialog"
 
 **Interfaces:** 无
 
-- [ ] **Step 1: 按设计 §7 逐条验收**（API + 尽量浏览器）
+- [x] **Step 1: 按设计 §7 逐条验收**（API + 尽量浏览器）
 
-- [ ] **Step 2: 更新 README / 设计状态 / 计划验收表**
+- [x] **Step 2: 更新 README / 设计状态 / 计划验收表**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "docs: record character identity acceptance"
@@ -286,4 +286,47 @@ git commit -m "docs: record character identity acceptance"
 
 - 人物 `nextCode()` 已有；本体另写 `nextIdentityCode()` → `ID-0001` 风格  
 - members 全量替换时注意：勿误清无关人物；仅处理本 identity 原成员 + 本次提交 id  
-- TSD：改 `.sql` 后务必做文件头校验再 commit  
+- TSD：改 `.sql` 后务必做文件头校验再 commit
+
+---
+
+## Task 6 验收结果（设计 §7）
+
+**Branch:** `master` · **Date:** 2026-08-13 · **Env:** JDK 24.0.1, MySQL `story_admin`, admin API `http://localhost:8081`, Vite `http://localhost:5174`
+
+### Unit tests
+
+```text
+mvn "-Dtest=CharacterIdentityServiceTest,CharacterServiceTest" test  (JAVA_HOME=D:\jdk\jdk-24.0.1)
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+（CharacterIdentityServiceTest 2 + CharacterServiceTest 6，含 addForm / identity 字段）
+```
+
+### API smoke（重启服务并应用 Flyway V4 后）
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| `GET /api/health` | PASS | `{"status":"ok","service":"story-admin-server"}` |
+| 无本体人物 create/get | PASS | identityId=null |
+| 建本体 + members≥2（formLabel）+ 刷新 | PASS | code=`ID-*`, labels=`daily,thief` |
+| 本体共用素材 + 形态各自挂素材 | PASS | identity assets + `PUT /characters/{id}/assets` |
+| 有形态删本体 / 硬删本体引用素材 | PASS | 均 **409**，message 含形态名/本体名 |
+| 人物列表筛 identityId + formLabel | PASS | list 字段可读；UI 映射本体名 |
+| `POST /characters/{id}/forms` 升级 | PASS | 自动建本体，原+新形态均挂接，刷新可见 |
+
+原始摘要：`.superpowers/sdd/task-6-smoke.json`
+
+### 设计第 7 节验收清单
+
+| # | 项 | 结果 | 说明 |
+|---|----|------|------|
+| 1 | 无本体时人物用法与现在一致 | PASS | API create/get `identityId=null`；单测既有人物流 |
+| 2 | 可建本体并挂 ≥2 形态（含 formLabel），刷新后配置仍在 | PASS | members set + GET 持久化；`CharacterIdentityServiceTest` |
+| 3 | 本体可挂共用素材；形态可各自挂素材 | PASS | identity assets + character assets API |
+| 4 | 有形态时删本体 → 409；硬删被本体引用的素材 → 409 | PASS | API 409 + 名称；单测 `deleteBlockedWhenHasForms` |
+| 5 | 人物列表能看出所属本体并跳转 | PARTIAL | API `identityId`/`formLabel` + 列表筛；`CharacterList` 列与 router-link（代码）；Vite `/characters` 200；**浏览器未点跳转** |
+| 6 | 独立人物「添加形态」自动生成本体并挂接两者 | PASS | `POST .../forms` + 刷新详情；`CharacterServiceTest#addFormCreatesIdentity...`；UI 弹窗未点 |
+
+> 完整报告：`.superpowers/sdd/task-6-report.md`
+
