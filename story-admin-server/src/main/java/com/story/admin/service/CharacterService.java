@@ -112,7 +112,10 @@ public class CharacterService {
         req.storyName(),
         req.publicIntro(),
         req.internalNote());
-    applyIdentityFields(profile, req.identityId(), req.formLabel());
+    // Omitted identity fields mean leave unchanged; membership changes go via identity API / addForm.
+    if (req.identityId() != null || req.formLabel() != null) {
+      applyIdentityFields(profile, req.identityId(), req.formLabel());
+    }
     return repo.save(profile);
   }
 

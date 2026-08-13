@@ -12,6 +12,7 @@ import com.story.admin.dto.CharacterAddFormRequest;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.CharacterIdentityUpsertRequest;
 import com.story.admin.dto.CharacterQuery;
+import com.story.admin.dto.CharacterUpdateRequest;
 import com.story.admin.dto.IdentityDetailResponse;
 import com.story.admin.dto.IdentityMemberRequest;
 import com.story.admin.exception.ConflictException;
@@ -149,6 +150,29 @@ class CharacterServiceTest {
     assertThat(refreshedOriginal.getFormLabel()).isEqualTo("日常");
     assertThat(created.getFormLabel()).isEqualTo("怪盗");
     assertThat(identityRepository.count()).isEqualTo(1);
+  }
+
+  @Test
+  void updatePreservesIdentityWhenOmitted() {
+    CharacterProfile character =
+        characterService.create(
+            new CharacterCreateRequest(
+                "日常形态", null, null, null, null, null, "暗夜物语", null, null, null, null));
+    var identity =
+        identityService.create(
+            new CharacterIdentityUpsertRequest("怪盗女孩", "暗夜物语", null, null));
+    identityService.setMembers(
+        identity.id(), List.of(new IdentityMemberRequest(character.getId(), "日常", 1)));
+
+    CharacterProfile updated =
+        characterService.update(
+            character.getId(),
+            new CharacterUpdateRequest(
+                "改名后", null, null, null, null, null, "暗夜物语", null, null, null, null));
+
+    assertThat(updated.getName()).isEqualTo("改名后");
+    assertThat(updated.getIdentityId()).isEqualTo(identity.id());
+    assertThat(updated.getFormLabel()).isEqualTo("日常");
   }
 
   @Test
