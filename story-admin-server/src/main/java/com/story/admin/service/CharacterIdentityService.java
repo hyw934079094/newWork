@@ -192,6 +192,7 @@ public class CharacterIdentityService {
     List<Long> assetIds = identityAssetRelRepository.findAssetIdsByIdentityId(identity.getId());
     Map<Long, Asset> assetsById =
         assetRepository.findAllById(assetIds).stream()
+            .filter(asset -> asset.getStatus() == AssetStatus.NORMAL)
             .collect(Collectors.toMap(Asset::getId, Function.identity()));
 
     List<IdentityDetailResponse.MemberView> memberViews = new ArrayList<>(forms.size());
@@ -202,6 +203,7 @@ public class CharacterIdentityService {
               form.getId(), form.getCode(), form.getName(), form.getFormLabel(), assetCount));
     }
 
+    // Rel rows for DELETED may remain until next setAssets; never expose non-NORMAL to the editor.
     List<IdentityDetailResponse.AssetView> assetViews = new ArrayList<>(assetIds.size());
     for (Long assetId : assetIds) {
       Asset asset = assetsById.get(assetId);

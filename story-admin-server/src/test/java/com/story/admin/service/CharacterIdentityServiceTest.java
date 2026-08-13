@@ -1,5 +1,6 @@
 package com.story.admin.service;
 
+import static com.story.admin.domain.AssetStatus.DELETED;
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,9 +21,11 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest
 @Transactional
@@ -110,6 +113,39 @@ class CharacterIdentityServiceTest {
     identityService.delete(created.id());
     assertThat(identityRepository.findById(created.id())).isEmpty();
     assertThat(identityAssetRelRepository.findByIdentityId(created.id())).isEmpty();
+  }
+
+  @Test
+  void getDetailExcludesDeletedAssetsButSetAssetsWithNormalSucceeds() {
+    var created =
+        identityService.create(
+            new CharacterIdentityUpsertRequest("回收素材本体", null, null, null));
+    Asset normal = persistAsset("identity-normal-kept");
+    Asset deleted = persistAsset("identity-deleted-ghost");
+    identityService.setAssets(created.id(), List.of(normal.getId(), deleted.getId()));
+
+    deleted.setStatus(DELETED);
+    assetRepository.save(deleted);
+
+    assertThat(identityAssetRelRepository.findAssetIdsByIdentityId(created.id()))
+        .containsExactlyInAnyOrder(normal.getId(), deleted.getId());
+
+    var detail = identityService.get(created.id());
+    assertThat(detail.assets()).extracting("assetId").containsExactly(normal.getId());
+
+    var saved = identityService.setAssets(created.id(), List.of(normal.getId()));
+    assertThat(saved.assets()).extracting("assetId").containsExactly(normal.getId());
+    assertThat(identityAssetRelRepository.findAssetIdsByIdentityId(created.id()))
+        .containsExactly(normal.getId());
+
+    assertThatThrownBy(() -> identityService.setAssets(created.id(), List.of(deleted.getId())))
+        .isInstanceOf(ResponseStatusException.class)
+        .satisfies(
+            ex -> {
+              ResponseStatusException rse = (ResponseStatusException) ex;
+              assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+              assertThat(rse.getReason()).contains("asset is not available");
+            });
   }
 
   private Asset persistAsset(String name) {

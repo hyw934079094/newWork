@@ -146,10 +146,17 @@ async function syncAssetTableSelection() {
 
 function onAssetSelectionChange(rows: AssetItem[]) {
   if (syncingAssetSelection.value) return;
-  // Keep selections outside the current result page/filter.
+  // Keep selections outside the current result page/filter (search only).
   const visibleIds = new Set(availableAssets.value.map((a) => a.id));
   const kept = selectedAssetIds.value.filter((id) => !visibleIds.has(id));
   selectedAssetIds.value = [...kept, ...rows.map((r) => r.id)];
+}
+
+/** Drop recycled / non-NORMAL ghost IDs when we have an unfiltered NORMAL catalog. */
+function pruneSelectedToLoadableNormal() {
+  if (assetQuery.value.trim()) return;
+  const normalIds = new Set(availableAssets.value.map((a) => a.id));
+  selectedAssetIds.value = selectedAssetIds.value.filter((id) => normalIds.has(id));
 }
 
 async function loadAvailableAssets() {
@@ -159,6 +166,7 @@ async function loadAvailableAssets() {
       status: 'NORMAL',
       q: assetQuery.value.trim() || undefined,
     });
+    pruneSelectedToLoadableNormal();
     await syncAssetTableSelection();
   } catch (e) {
     ElMessage.error(apiError(e, '加载素材失败'));
@@ -193,7 +201,9 @@ async function loadIdentity() {
       formLabel: m.formLabel ?? '',
       assetCount: m.assetCount ?? 0,
     }));
+    // Backend omits non-NORMAL; drop ghosts not in the unfiltered NORMAL catalog.
     selectedAssetIds.value = (detail.assets ?? []).map((a) => a.assetId);
+    pruneSelectedToLoadableNormal();
     await syncAssetTableSelection();
   } catch (e) {
     ElMessage.error(apiError(e, '加载本体失败'));
@@ -259,7 +269,8 @@ watch(identityId, () => {
 });
 
 onMounted(async () => {
-  await Promise.all([loadCharacters(), loadAvailableAssets(), loadIdentity()]);
+  await Promise.all([loadCharacters(), loadAvailableAssets()]);
+  await loadIdentity();
 });
 </script>
 
