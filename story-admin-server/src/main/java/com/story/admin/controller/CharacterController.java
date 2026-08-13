@@ -2,10 +2,12 @@ package com.story.admin.controller;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.CharacterProfile;
+import com.story.admin.dto.CharacterAddFormRequest;
 import com.story.admin.dto.CharacterAssetIdsRequest;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.CharacterQuery;
 import com.story.admin.dto.CharacterUpdateRequest;
+import com.story.admin.dto.IdentityDetailResponse;
 import com.story.admin.service.CharacterService;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +40,10 @@ public class CharacterController {
       @RequestParam(required = false) String gender,
       @RequestParam(required = false) String ageStage,
       @RequestParam(required = false) String race,
-      @RequestParam(required = false) String occupation) {
-    return characterService.list(new CharacterQuery(q, storyName, gender, ageStage, race, occupation));
+      @RequestParam(required = false) String occupation,
+      @RequestParam(required = false) Long identityId) {
+    return characterService.list(
+        new CharacterQuery(q, storyName, gender, ageStage, race, occupation, identityId));
   }
 
   @GetMapping("/{id}")
@@ -69,6 +73,12 @@ public class CharacterController {
   @PostMapping
   public CharacterProfile create(@RequestBody CharacterCreateRequest body) {
     return characterService.create(body);
+  }
+
+  @PostMapping("/{id}/forms")
+  public IdentityDetailResponse addForm(
+      @PathVariable Long id, @RequestBody CharacterAddFormRequest body) {
+    return characterService.addForm(id, body);
   }
 
   @PutMapping("/{id}")

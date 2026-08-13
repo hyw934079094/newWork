@@ -9,4 +9,6 @@ public record CharacterCreateRequest(
     String occupation,
     String storyName,
     String publicIntro,
-    String internalNote) {}
+    String internalNote,
+    Long identityId,
+    String formLabel) {}

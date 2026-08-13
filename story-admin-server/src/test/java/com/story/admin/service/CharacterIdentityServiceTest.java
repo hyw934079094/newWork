@@ -56,7 +56,7 @@ class CharacterIdentityServiceTest {
     CharacterProfile form =
         characterService.create(
             new CharacterCreateRequest(
-                "日常形态甲", null, null, null, null, null, null, null, null));
+                "日常形态甲", null, null, null, null, null, null, null, null, null, null));
     identityService.setMembers(
         created.id(), List.of(new IdentityMemberRequest(form.getId(), "日常", 1)));
 
@@ -77,10 +77,10 @@ class CharacterIdentityServiceTest {
 
     CharacterProfile a =
         characterService.create(
-            new CharacterCreateRequest("形态A", null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("形态A", null, null, null, null, null, null, null, null, null, null));
     CharacterProfile b =
         characterService.create(
-            new CharacterCreateRequest("形态B", null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("形态B", null, null, null, null, null, null, null, null, null, null));
     identityService.setMembers(
         created.id(),
         List.of(

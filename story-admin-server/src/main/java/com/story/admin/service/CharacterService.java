@@ -5,9 +5,12 @@ import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.CharacterProfile;
+import com.story.admin.dto.CharacterAddFormRequest;
 import com.story.admin.dto.CharacterCreateRequest;
+import com.story.admin.dto.CharacterIdentityUpsertRequest;
 import com.story.admin.dto.CharacterQuery;
 import com.story.admin.dto.CharacterUpdateRequest;
+import com.story.admin.dto.IdentityDetailResponse;
 import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
@@ -37,26 +40,30 @@ public class CharacterService {
   private final AssetRepository assetRepository;
   private final AssetCategoryRepository categoryRepository;
   private final AssetService assetService;
+  private final CharacterIdentityService identityService;
 
   public CharacterService(
       CharacterProfileRepository repo,
       AssetCharacterRelRepository characterRelRepository,
       AssetRepository assetRepository,
       AssetCategoryRepository categoryRepository,
-      AssetService assetService) {
+      AssetService assetService,
+      CharacterIdentityService identityService) {
     this.repo = repo;
     this.characterRelRepository = characterRelRepository;
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.assetService = assetService;
+    this.identityService = identityService;
   }
 
   public List<CharacterProfile> list() {
-    return list(new CharacterQuery(null, null, null, null, null, null));
+    return list(new CharacterQuery(null, null, null, null, null, null, null));
   }
 
   public List<CharacterProfile> list(CharacterQuery query) {
-    CharacterQuery q = query == null ? new CharacterQuery(null, null, null, null, null, null) : query;
+    CharacterQuery q =
+        query == null ? new CharacterQuery(null, null, null, null, null, null, null) : query;
     return repo.findAll(buildSpec(q), Sort.by(Sort.Direction.ASC, "code"));
   }
 
@@ -84,6 +91,7 @@ public class CharacterService {
         req.storyName(),
         req.publicIntro(),
         req.internalNote());
+    applyIdentityFields(profile, req.identityId(), req.formLabel());
     return repo.save(profile);
   }
 
@@ -104,7 +112,50 @@ public class CharacterService {
         req.storyName(),
         req.publicIntro(),
         req.internalNote());
+    applyIdentityFields(profile, req.identityId(), req.formLabel());
     return repo.save(profile);
+  }
+
+  @Transactional
+  public IdentityDetailResponse addForm(Long id, CharacterAddFormRequest req) {
+    if (req == null || req.newCharacter() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "newCharacter is required");
+    }
+    CharacterProfile original = get(id);
+    Long identityId = original.getIdentityId();
+
+    if (identityId == null) {
+      String identityName =
+          blankToNull(req.identityName()) != null ? req.identityName().trim() : original.getName();
+      IdentityDetailResponse createdIdentity =
+          identityService.create(
+              new CharacterIdentityUpsertRequest(identityName, original.getStoryName(), null, null));
+      identityId = createdIdentity.id();
+      String originalLabel =
+          blankToNull(req.originalFormLabel()) != null
+              ? req.originalFormLabel().trim()
+              : "默认";
+      original.setIdentityId(identityId);
+      original.setFormLabel(originalLabel);
+      repo.save(original);
+    }
+
+    CharacterCreateRequest nc = req.newCharacter();
+    create(
+        new CharacterCreateRequest(
+            nc.name(),
+            nc.alias(),
+            nc.gender(),
+            nc.ageStage(),
+            nc.race(),
+            nc.occupation(),
+            nc.storyName(),
+            nc.publicIntro(),
+            nc.internalNote(),
+            identityId,
+            nc.formLabel()));
+
+    return identityService.get(identityId);
   }
 
   @Transactional
@@ -248,6 +299,9 @@ public class CharacterService {
                 cb.lower(cb.coalesce(root.get("occupation"), "")),
                 "%" + occupation.toLowerCase(Locale.ROOT) + "%"));
       }
+      if (query.identityId() != null) {
+        predicates.add(cb.equal(root.get("identityId"), query.identityId()));
+      }
       return cb.and(predicates.toArray(Predicate[]::new));
     };
   }
@@ -289,6 +343,14 @@ public class CharacterService {
     profile.setStoryName(blankToNull(storyName));
     profile.setPublicIntro(blankToNull(publicIntro));
     profile.setInternalNote(blankToNull(internalNote));
+  }
+
+  private void applyIdentityFields(CharacterProfile profile, Long identityId, String formLabel) {
+    if (identityId != null) {
+      identityService.get(identityId);
+    }
+    profile.setIdentityId(identityId);
+    profile.setFormLabel(blankToNull(formLabel));
   }
 
   private static String blankToNull(String value) {

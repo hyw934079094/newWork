@@ -55,10 +55,10 @@ class AssetTagLinkTest {
     Long id = persistAsset("linked").getId();
     CharacterProfile a =
         characterService.create(
-            new CharacterCreateRequest("甲", null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("甲", null, null, null, null, null, null, null, null, null, null));
     CharacterProfile b =
         characterService.create(
-            new CharacterCreateRequest("乙", null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("乙", null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         id, AssetUpdateRequest.builder().characterIds(List.of(a.getId())).build());
 
