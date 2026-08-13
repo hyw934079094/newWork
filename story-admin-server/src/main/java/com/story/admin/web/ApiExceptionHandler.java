@@ -1,6 +1,7 @@
 package com.story.admin.web;
 
 import com.story.admin.config.UploadProperties;
+import com.story.admin.exception.ConflictException;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +50,16 @@ public class ApiExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
     return badRequest(ex.getMessage() == null ? "" : ex.getMessage());
+  }
+
+  @ExceptionHandler(ConflictException.class)
+  public ResponseEntity<Map<String, Object>> handleConflict(ConflictException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            Map.of(
+                "status", 409,
+                "error", "Conflict",
+                "message", ex.getMessage() == null ? "" : ex.getMessage()));
   }
 
   private String uploadSizeMessage() {

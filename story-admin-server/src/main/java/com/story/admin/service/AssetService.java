@@ -1,11 +1,15 @@
 package com.story.admin.service;
 
+import com.story.admin.domain.AiReferenceItem;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
+import com.story.admin.domain.CharacterProfile;
 import com.story.admin.dto.AssetUpdateRequest;
+import com.story.admin.exception.ConflictException;
+import com.story.admin.repository.AiReferenceItemRepository;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetRepository;
@@ -14,6 +18,7 @@ import com.story.admin.repository.AssetTagRepository;
 import com.story.admin.repository.CharacterProfileRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -40,6 +45,7 @@ public class AssetService {
   private final AssetTagRelRepository tagRelRepository;
   private final AssetCharacterRelRepository characterRelRepository;
   private final CharacterProfileRepository characterProfileRepository;
+  private final AiReferenceItemRepository aiReferenceItemRepository;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -48,7 +54,8 @@ public class AssetService {
       AssetTagRepository tagRepository,
       AssetTagRelRepository tagRelRepository,
       AssetCharacterRelRepository characterRelRepository,
-      CharacterProfileRepository characterProfileRepository) {
+      CharacterProfileRepository characterProfileRepository,
+      AiReferenceItemRepository aiReferenceItemRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -56,6 +63,7 @@ public class AssetService {
     this.tagRelRepository = tagRelRepository;
     this.characterRelRepository = characterRelRepository;
     this.characterProfileRepository = characterProfileRepository;
+    this.aiReferenceItemRepository = aiReferenceItemRepository;
   }
 
   @Transactional
@@ -143,6 +151,37 @@ public class AssetService {
   public Path resolveContent(Long id) {
     Asset asset = getRaw(id);
     return storageService.resolveAbsolute(asset.getStoragePath());
+  }
+
+  @Transactional
+  public Asset recycle(Long id) {
+    Asset asset = getRaw(id);
+    asset.setStatus(AssetStatus.DELETED);
+    asset.setDeletedAt(LocalDateTime.now());
+    return hydrate(assetRepository.save(asset));
+  }
+
+  @Transactional
+  public Asset restore(Long id) {
+    Asset asset = getRaw(id);
+    asset.setStatus(AssetStatus.NORMAL);
+    asset.setDeletedAt(null);
+    return hydrate(assetRepository.save(asset));
+  }
+
+  @Transactional
+  public void hardDelete(Long id) {
+    Asset asset = getRaw(id);
+    List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(id);
+    List<AiReferenceItem> aiRefs = aiReferenceItemRepository.findByAssetId(id);
+    if (!characterIds.isEmpty() || !aiRefs.isEmpty()) {
+      throw new ConflictException(buildReferenceSummary(characterIds, aiRefs));
+    }
+    tagRelRepository.deleteByAssetId(id);
+    characterRelRepository.deleteByAssetId(id);
+    String storagePath = asset.getStoragePath();
+    assetRepository.delete(asset);
+    storageService.deleteQuietly(storagePath);
   }
 
   @Transactional
@@ -306,6 +345,41 @@ public class AssetService {
     String replaced = originalFilename.replace("\\", "/");
     int slash = replaced.lastIndexOf('/');
     return slash >= 0 ? replaced.substring(slash + 1) : replaced;
+  }
+
+  private String buildReferenceSummary(List<Long> characterIds, List<AiReferenceItem> aiRefs) {
+    StringBuilder sb = new StringBuilder("无法彻底删除：仍存在引用。");
+    if (!characterIds.isEmpty()) {
+      Map<Long, CharacterProfile> byId =
+          characterProfileRepository.findAllById(characterIds).stream()
+              .collect(Collectors.toMap(CharacterProfile::getId, Function.identity()));
+      String names =
+          characterIds.stream()
+              .map(
+                  cid -> {
+                    CharacterProfile profile = byId.get(cid);
+                    String name = profile == null ? "?" : profile.getName();
+                    return name + "(id=" + cid + ")";
+                  })
+              .collect(Collectors.joining(", "));
+      sb.append(" 人物关联: [").append(names).append("].");
+    }
+    if (!aiRefs.isEmpty()) {
+      String items =
+          aiRefs.stream()
+              .map(
+                  item ->
+                      "item#"
+                          + item.getId()
+                          + "/session="
+                          + item.getSessionId()
+                          + (item.getPurpose() == null || item.getPurpose().isBlank()
+                              ? ""
+                              : "/purpose=" + item.getPurpose()))
+              .collect(Collectors.joining(", "));
+      sb.append(" AI参考项(").append(aiRefs.size()).append("): [").append(items).append("].");
+    }
+    return sb.toString();
   }
 
   private static String blankToNull(String value) {

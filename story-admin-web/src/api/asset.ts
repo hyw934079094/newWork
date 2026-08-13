@@ -82,3 +82,17 @@ export async function moveAsset(
   const { data } = await client.put<AssetItem>(`/assets/${id}/move`, body);
   return data;
 }
+
+export async function recycleAsset(id: number): Promise<AssetItem> {
+  const { data } = await client.post<AssetItem>(`/assets/${id}/recycle`);
+  return data;
+}
+
+export async function restoreAsset(id: number): Promise<AssetItem> {
+  const { data } = await client.post<AssetItem>(`/assets/${id}/restore`);
+  return data;
+}
+
+export async function hardDeleteAsset(id: number): Promise<void> {
+  await client.delete(`/assets/${id}`);
+}

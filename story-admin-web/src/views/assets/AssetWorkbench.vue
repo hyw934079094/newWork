@@ -6,11 +6,13 @@ import {
   assetContentUrl,
   listAssets,
   moveAsset,
+  recycleAsset,
   reorderAssets,
   updateAsset,
   uploadAssets,
   type AssetItem,
 } from '../../api/asset';
+import { useRouter } from 'vue-router';
 import {
   createCategory,
   deleteCategory,
@@ -20,9 +22,11 @@ import {
 } from '../../api/category';
 import { listCharacters, type CharacterItem } from '../../api/character';
 
+const router = useRouter();
 const loading = ref(false);
 const uploading = ref(false);
 const saving = ref(false);
+const recycling = ref(false);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
 const selectedCategoryId = ref<number | null>(null);
@@ -357,6 +361,26 @@ async function saveMeta() {
   }
 }
 
+async function moveToRecycle() {
+  if (!currentAsset.value) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认将「${currentAsset.value.displayName}」移入回收站？`,
+      '移入回收站',
+      { type: 'warning' },
+    );
+    recycling.value = true;
+    await recycleAsset(currentAsset.value.id);
+    ElMessage.success('已移入回收站');
+    await loadAssets(null);
+  } catch (e: unknown) {
+    if (e === 'cancel' || e === 'close') return;
+    ElMessage.error(apiError(e, '移入回收站失败'));
+  } finally {
+    recycling.value = false;
+  }
+}
+
 function formatSize(bytes: number | null | undefined): string {
   if (bytes == null) return '-';
   if (bytes < 1024) return `${bytes} B`;
@@ -405,6 +429,7 @@ onMounted(async () => {
           hidden
           @change="onFilesPicked"
         />
+        <el-button @click="router.push('/recycle')">回收站</el-button>
         <el-button
           type="primary"
           :loading="uploading"
@@ -564,7 +589,12 @@ onMounted(async () => {
             <li>类型：{{ currentAsset.contentType || '-' }}</li>
             <li>分类：{{ selectedCategory?.name || '-' }}</li>
           </ul>
-          <el-button type="primary" :loading="saving" @click="saveMeta">保存</el-button>
+          <div class="editor-actions">
+            <el-button type="primary" :loading="saving" @click="saveMeta">保存</el-button>
+            <el-button type="danger" plain :loading="recycling" @click="moveToRecycle">
+              移入回收站
+            </el-button>
+          </div>
         </template>
         <p v-else class="empty">选中素材后可编辑名称与说明</p>
       </aside>
@@ -611,6 +641,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .layout {
   display: grid;

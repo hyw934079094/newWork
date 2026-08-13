@@ -7,6 +7,7 @@
         <span>故事管理</span>
         <RouterLink to="/assets">素材管理</RouterLink>
         <RouterLink to="/characters">人物管理</RouterLink>
+        <RouterLink to="/recycle">回收站</RouterLink>
         <span>分类与标签</span>
         <RouterLink to="/config">系统配置</RouterLink>
       </nav>
