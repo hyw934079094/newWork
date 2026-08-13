@@ -6,6 +6,7 @@
 - [管理端素材模块设计](docs/superpowers/specs/2026-08-13-asset-module-design.md)：标准首期素材能力设计（状态：已实现）。
 - [管理端素材组合编排设计](docs/superpowers/specs/2026-08-13-asset-combo-design.md)：组合成员/播放序列/步进停留与预览（状态：已实现（首期））。
 - [管理端人物本体与多形态设计](docs/superpowers/specs/2026-08-13-character-identity-design.md)：人物本体、形态映射、共用素材与「添加形态」（状态：已实现（首期））。
+- [管理端素材工作台筛选与替换设计](docs/superpowers/specs/2026-08-13-asset-workbench-filter-replace-design.md)：工作台默认「无关联」人物筛选 + 单张替换图片（状态：已实现（首期））。
 
 本仓库采用四项目单仓库结构：
 
@@ -53,6 +54,7 @@
 6. 健康检查：`GET http://localhost:8081/api/health` → `{"status":"ok","service":"story-admin-server"}`。
 7. **组合编排入口**：侧栏「素材管理 → 组合编排」，路由 `/assets/combos`（编辑 `/assets/combos/:id`）；API 前缀 `/api/combos`。
 8. **人物本体入口**：侧栏「人物管理 → 人物本体」，路由 `/character-identities`（编辑 `/character-identities/:id`）；人物列表 `/characters` 含所属本体列与「添加形态」；API 前缀 `/api/character-identities`，升级流 `POST /api/characters/{id}/forms`。
+9. **素材工作台筛选与替换**：路由 `/assets`；默认人物筛选「无关联」（`characterFilter=unlinked`）；详情「替换图片」覆盖原文件（`POST /api/assets/{id}/content`），素材 id / 分类 / 关联不变。
 
 ### 使用端 / 双端一并启动
 

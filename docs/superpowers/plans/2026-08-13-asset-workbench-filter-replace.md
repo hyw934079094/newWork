@@ -1,6 +1,6 @@
 # 素材工作台筛选与替换 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 工作台按人物（默认无关联）+ 关键字筛选素材，并支持单张「替换图片」覆盖原文件且保持素材 id。
 
@@ -49,7 +49,7 @@
 - Produces: `list(categoryId, status, q, characterFilter, characterId)`
 - 规则：`characterId != null` → 关联该人物；else `unlinked` → 无 rel；`all` 或不识别时按 all（Controller 工作台会显式传）
 
-- [ ] **Step 1: 失败测试 — unlinked 不含已关联素材**
+- [x] **Step 1: 失败测试 — unlinked 不含已关联素材**
 
 ```java
 @Test
@@ -58,14 +58,14 @@ void listUnlinkedExcludesCharacterLinkedAssets() {
 }
 ```
 
-- [ ] **Step 2: 测试 — characterId 仅返回关联**
+- [x] **Step 2: 测试 — characterId 仅返回关联**
 
 ```java
 @Test
 void listByCharacterIdReturnsOnlyLinked() { ... }
 ```
 
-- [ ] **Step 3: 实现 JPQL/服务层 + Controller 参数；测试 PASS**
+- [x] **Step 3: 实现 JPQL/服务层 + Controller 参数；测试 PASS**
 
 示例 JPQL 条件（示意）：
 
@@ -74,7 +74,7 @@ unlinked: not exists (select 1 from AssetCharacterRel r where r.assetId = a.id)
 by character: exists (... r.characterId = :characterId)
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat: filter assets by character unlinked/all/id"
@@ -94,23 +94,23 @@ git commit -m "feat: filter assets by character unlinked/all/id"
 - Produces: `Asset replaceContent(Long id, MultipartFile file)`
 - 校验 NORMAL；类型/大小同 upload；更新元数据；**不改** displayName
 
-- [ ] **Step 1: 失败测试 — 回收站素材不可替换**
+- [x] **Step 1: 失败测试 — 回收站素材不可替换**
 
 ```java
 @Test
 void replaceContentRejectsNonNormal() { ... }
 ```
 
-- [ ] **Step 2: 成功测试 — 同 path 内容与 checksum 变、displayName 不变**
+- [x] **Step 2: 成功测试 — 同 path 内容与 checksum 变、displayName 不变**
 
 ```java
 @Test
 void replaceContentOverwritesFileKeepsDisplayName() { ... }
 ```
 
-- [ ] **Step 3: 实现 + 测试 PASS**
+- [x] **Step 3: 实现 + 测试 PASS**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat: replace asset image content in place"
@@ -128,13 +128,13 @@ git commit -m "feat: replace asset image content in place"
 - Consumes: list 新参数
 - Produces: 人物下拉默认「无关联」；关键字联动；排序禁用规则
 
-- [ ] **Step 1: `listAssets` 增加 `characterFilter?`、`characterId?`**
+- [x] **Step 1: `listAssets` 增加 `characterFilter?`、`characterId?`**
 
-- [ ] **Step 2: UI 下拉 + `loadAssets` 传参；默认 unlinked**
+- [x] **Step 2: UI 下拉 + `loadAssets` 传参；默认 unlinked**
 
-- [ ] **Step 3: `isSearchActive` / 排序禁用：`q` 非空或人物不是「全部」时禁用**
+- [x] **Step 3: `isSearchActive` / 排序禁用：`q` 非空或人物不是「全部」时禁用**
 
-- [ ] **Step 4: `npm run build` PASS + Commit**
+- [x] **Step 4: `npm run build` PASS + Commit**
 
 ```bash
 git commit -m "feat: workbench character filter defaulting to unlinked"
@@ -152,11 +152,11 @@ git commit -m "feat: workbench character filter defaulting to unlinked"
 - Consumes: `POST /assets/{id}/content`
 - Produces: 详情区「替换图片」；预览 `?t=` bust
 
-- [ ] **Step 1: API 客户端**
+- [x] **Step 1: API 客户端**
 
-- [ ] **Step 2: 按钮 + 上传流程 + ElMessage**
+- [x] **Step 2: 按钮 + 上传流程 + ElMessage**
 
-- [ ] **Step 3: build PASS + Commit**
+- [x] **Step 3: build PASS + Commit**
 
 ```bash
 git commit -m "feat: replace asset image from workbench detail"
@@ -171,9 +171,9 @@ git commit -m "feat: replace asset image from workbench detail"
 - Modify: `README.md` 一句说明筛选默认与替换
 - Append: 本计划验收表
 
-- [ ] **Step 1: API/单测验收设计 §5；UI 尽量点验或标 PARTIAL**
+- [x] **Step 1: API/单测验收设计 §5；UI 尽量点验或标 PARTIAL**
 
-- [ ] **Step 2: 文档回写 + Commit**
+- [x] **Step 2: 文档回写 + Commit**
 
 ```bash
 git commit -m "docs: record workbench filter and replace acceptance"
@@ -194,4 +194,44 @@ git commit -m "docs: record workbench filter and replace acceptance"
 
 - Controller 上 `POST /{id}/content` 与 `GET /{id}/content` 共存合法  
 - 替换测勿依赖已 git 跟踪的生产图；用测试临时目录或 H2+mock storage  
-- 若改 `search` 签名，更新所有调用点（含回收站若共用）  
+- 若改 `search` 签名，更新所有调用点（含回收站若共用）
+
+---
+
+## Task 5 验收结果（设计 §5）
+
+**Branch:** `master` · **Date:** 2026-08-13 · **BASE:** `6c4d429` · **Env:** JDK 24.0.1, Maven 3.9.10
+
+### Unit tests
+
+```text
+mvn "-Dtest=AssetListFilterTest,AssetReplaceContentTest" test  (JAVA_HOME=D:\jdk\jdk-24.0.1)
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS / EXIT=0
+```
+
+| Test class | Cases | Result |
+|------------|-------|--------|
+| AssetListFilterTest | listUnlinkedExcludesCharacterLinkedAssets; listByCharacterIdReturnsOnlyLinked | PASS |
+| AssetReplaceContentTest | replaceContentRejectsNonNormal; replaceContentOverwritesFileKeepsDisplayName | PASS |
+
+### Frontend build (Tasks 3–4)
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| `npm run build` (Task 3) | PASS | commit `7d81621` report |
+| `npm run build` (Task 4) | PASS | commit `6c4d429` report |
+| Browser UI click-through | PARTIAL | No browser session in Task 5; code + build only |
+
+### 设计第 5 节验收清单
+
+| # | 项 | 结果 | 说明 |
+|---|----|------|------|
+| 1 | 进入工作台（选定分类）默认仅展示无人物关联的 NORMAL 素材 | PASS | API: `characterFilter=unlinked` 单测；UI 默认「无关联」（Task 3）；浏览器未点 |
+| 2 | 选「全部」可见该分类下全部 NORMAL；选某人物仅见其关联素材 | PASS | API: characterId / all 路径单测+实现；UI 下拉传参（Task 3）；浏览器未点 |
+| 3 | 关键字与人物条件同时生效 | PASS | Repository AND `q`+人物条件（Task 1）；UI 联动 reload（Task 3）；无单独 q∧人物联调会话 |
+| 4 | 替换图片后同一 id 预览更新，分类/人物/标签不变；旧文件内容被覆盖 | PASS | `AssetReplaceContentTest` 覆盖内容与 displayName；UI `replaceAssetContent`+`?t=` bust（Task 4）；浏览器预览未点 |
+| 5 | 非 NORMAL（如已在回收站）不可替换 | PASS | `replaceContentRejectsNonNormal`；UI disable when status ≠ NORMAL |
+
+> 完整报告：`.superpowers/sdd/task-5-report.md`
+
