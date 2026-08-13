@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
 import SysConfig from '../views/config/SysConfig.vue';
 import CharacterList from '../views/characters/CharacterList.vue';
+import IdentityList from '../views/identities/IdentityList.vue';
+import IdentityEditor from '../views/identities/IdentityEditor.vue';
 import AssetWorkbench from '../views/assets/AssetWorkbench.vue';
 import CategoryManage from '../views/assets/CategoryManage.vue';
 import ComboList from '../views/combos/ComboList.vue';
@@ -19,6 +21,12 @@ const router = createRouter({
     { path: '/assets/combos/:id', name: 'asset-combo-edit', component: ComboEditor },
     { path: '/ai-reference', name: 'ai-reference', component: AiReference },
     { path: '/characters', name: 'characters', component: CharacterList },
+    { path: '/character-identities', name: 'character-identities', component: IdentityList },
+    {
+      path: '/character-identities/:id',
+      name: 'character-identity-edit',
+      component: IdentityEditor,
+    },
     { path: '/recycle', name: 'recycle', component: RecycleBin },
     { path: '/config', name: 'sys-config', component: SysConfig },
   ],

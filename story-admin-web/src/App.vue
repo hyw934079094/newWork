@@ -22,7 +22,17 @@
           </div>
         </div>
         <RouterLink to="/ai-reference">AI 参考区</RouterLink>
-        <RouterLink to="/characters">人物管理</RouterLink>
+        <div class="nav-group">
+          <div class="nav-group-title">人物管理</div>
+          <div class="nav-children">
+            <RouterLink
+              to="/characters"
+              active-class=""
+              exact-active-class="router-link-active"
+            >人物</RouterLink>
+            <RouterLink to="/character-identities">人物本体</RouterLink>
+          </div>
+        </div>
         <RouterLink to="/recycle">回收站</RouterLink>
         <RouterLink to="/config">系统配置</RouterLink>
       </nav>
