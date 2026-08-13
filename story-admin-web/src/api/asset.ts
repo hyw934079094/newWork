@@ -33,8 +33,18 @@ export interface AssetUpdatePayload {
 
 const client = axios.create({ baseURL: '/api' });
 
-export function assetContentUrl(id: number): string {
-  return `/api/assets/${id}/content`;
+export function assetContentUrl(id: number, bust?: number | string): string {
+  const base = `/api/assets/${id}/content`;
+  return bust != null && bust !== '' ? `${base}?t=${bust}` : base;
+}
+
+export async function replaceAssetContent(id: number, file: File): Promise<AssetItem> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await client.post<AssetItem>(`/assets/${id}/content`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
 }
 
 export async function listAssets(params: {

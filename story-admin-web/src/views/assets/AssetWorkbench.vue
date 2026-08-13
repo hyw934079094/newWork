@@ -8,6 +8,7 @@ import {
   moveAsset,
   recycleAsset,
   reorderAssets,
+  replaceAssetContent,
   updateAsset,
   uploadAssets,
   type AssetItem,
@@ -21,6 +22,9 @@ const loading = ref(false);
 const uploading = ref(false);
 const saving = ref(false);
 const recycling = ref(false);
+const replacing = ref(false);
+const previewBust = ref(0);
+const replaceFileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
 const selectedCategoryId = ref<number | null>(null);
@@ -312,6 +316,33 @@ async function moveToRecycle() {
   }
 }
 
+function triggerReplace() {
+  if (!currentAsset.value) return;
+  if (currentAsset.value.status !== 'NORMAL') {
+    ElMessage.warning('仅正常状态的素材可替换图片');
+    return;
+  }
+  replaceFileInput.value?.click();
+}
+
+async function onReplaceFilePicked(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !currentAsset.value) return;
+  replacing.value = true;
+  try {
+    const updated = await replaceAssetContent(currentAsset.value.id, file);
+    previewBust.value = Date.now();
+    ElMessage.success('图片已替换');
+    await loadAssets(updated.id);
+  } catch (e) {
+    ElMessage.error(apiError(e, '替换失败'));
+  } finally {
+    replacing.value = false;
+  }
+}
+
 function formatSize(bytes: number | null | undefined): string {
   if (bytes == null) return '-';
   if (bytes < 1024) return `${bytes} B`;
@@ -429,7 +460,10 @@ onMounted(async () => {
 
       <section v-loading="loading" class="pane preview">
         <div v-if="currentAsset" class="preview-main">
-          <img :src="assetContentUrl(currentAsset.id)" :alt="currentAsset.displayName" />
+          <img
+            :src="assetContentUrl(currentAsset.id, previewBust || undefined)"
+            :alt="currentAsset.displayName"
+          />
           <div class="preview-meta">
             <strong>{{ currentAsset.displayName }}</strong>
             <span>第 {{ currentIndex + 1 }} / {{ assets.length }} 份</span>
@@ -471,7 +505,10 @@ onMounted(async () => {
               :title="`${index + 1}. ${element.displayName}`"
               @click="selectAsset(element.id)"
             >
-              <img :src="assetContentUrl(element.id)" :alt="element.displayName" />
+              <img
+                :src="assetContentUrl(element.id, previewBust || undefined)"
+                :alt="element.displayName"
+              />
             </button>
           </template>
         </draggable>
@@ -530,8 +567,22 @@ onMounted(async () => {
             <li>类型：{{ currentAsset.contentType || '-' }}</li>
             <li>分类：{{ selectedCategory?.name || '-' }}</li>
           </ul>
+          <input
+            ref="replaceFileInput"
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
+            hidden
+            @change="onReplaceFilePicked"
+          />
           <div class="editor-actions">
             <el-button type="primary" :loading="saving" @click="saveMeta">保存</el-button>
+            <el-button
+              :loading="replacing"
+              :disabled="currentAsset.status !== 'NORMAL'"
+              @click="triggerReplace"
+            >
+              替换图片
+            </el-button>
             <el-button type="danger" plain :loading="recycling" @click="moveToRecycle">
               移入回收站
             </el-button>
