@@ -11,6 +11,7 @@ import {
 } from '../../api/combo';
 import { listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
+import ComboPreviewPlayer from './ComboPreviewPlayer.vue';
 
 interface MemberRow {
   assetId: number;
@@ -44,6 +45,7 @@ const loopEnabled = ref(true);
 const playSequence = ref('');
 const members = ref<MemberRow[]>([]);
 const stepHolds = ref<HoldRow[]>([]);
+const previewPlayerRef = ref<InstanceType<typeof ComboPreviewPlayer> | null>(null);
 
 const memberAssetIds = computed(() => new Set(members.value.map((m) => m.assetId)));
 
@@ -191,6 +193,31 @@ function addHoldRow() {
 
 function removeHoldRow(index: number) {
   stepHolds.value.splice(index, 1);
+}
+
+function previewFromForm() {
+  if (members.value.length === 0) {
+    ElMessage.warning('请先添加成员');
+    return;
+  }
+  if (!playSequence.value.trim()) {
+    ElMessage.warning('请填写播放序列');
+    return;
+  }
+  if (sequenceHints.value.some((h) => h.type === 'warning')) {
+    ElMessage.warning(sequenceHints.value.find((h) => h.type === 'warning')!.text);
+    return;
+  }
+  if (defaultIntervalSec.value == null || defaultIntervalSec.value < 0.1) {
+    ElMessage.warning('默认间隔须 ≥ 0.1 秒');
+    return;
+  }
+  const started = previewPlayerRef.value?.startFromForm();
+  if (!started) {
+    ElMessage.warning('当前表单无法预览，请检查序列与成员');
+    return;
+  }
+  document.getElementById('combo-preview-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function loadCategories() {
@@ -352,7 +379,7 @@ onMounted(async () => {
         <h2>{{ isNew ? '新建组合' : `编辑组合 #${comboId}` }}</h2>
       </div>
       <div class="actions">
-        <el-button disabled title="预览见下阶段">预览（下阶段）</el-button>
+        <el-button type="success" plain @click="previewFromForm">用当前表单预览</el-button>
         <el-button @click="backToList">返回列表</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </div>
@@ -515,7 +542,20 @@ onMounted(async () => {
       </ul>
     </div>
 
-    <p class="preview-note">预览播放器见下阶段（Task 6）</p>
+    <div id="combo-preview-panel" class="panel">
+      <div class="panel-head">
+        <strong>预览播放</strong>
+        <span class="muted">基于当前表单（无需先保存）</span>
+      </div>
+      <ComboPreviewPlayer
+        ref="previewPlayerRef"
+        :members="members"
+        :play-sequence="playSequence"
+        :default-interval-sec="defaultIntervalSec"
+        :loop-enabled="loopEnabled"
+        :step-holds="stepHolds"
+      />
+    </div>
   </section>
 </template>
 
@@ -631,8 +671,7 @@ onMounted(async () => {
   font-size: 13px;
 }
 .empty-hint,
-.note,
-.preview-note {
+.note {
   margin: 0;
   color: #7a8699;
   font-size: 13px;
