@@ -1,0 +1,15 @@
+﻿{
+    "health":  "{\"status\":\"ok\",\"service\":\"story-admin-server\"}",
+    "assetIds":  [
+                     9,
+                     8,
+                     10
+                 ],
+    "createId":  1,
+    "createSequence":  "1,2,1",
+    "createHolds":  1,
+    "updateLoop":  false,
+    "updateSequence":  "2,1,2,1",
+    "refreshOk":  true,
+    "hardDeleteBlocked":  true
+}

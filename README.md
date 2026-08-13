@@ -4,6 +4,7 @@
 
 - [需求与设计基线](docs/PROJECT_REQUIREMENTS.md)：记录已确认需求、核心设计原则、首期范围和待确认事项。后续开发应以此文档为持续更新的项目上下文。
 - [管理端素材模块设计](docs/superpowers/specs/2026-08-13-asset-module-design.md)：标准首期素材能力设计（状态：已实现）。
+- [管理端素材组合编排设计](docs/superpowers/specs/2026-08-13-asset-combo-design.md)：组合成员/播放序列/步进停留与预览（状态：已实现（首期））。
 
 本仓库采用四项目单仓库结构：
 
@@ -49,6 +50,7 @@
    ```
 
 6. 健康检查：`GET http://localhost:8081/api/health` → `{"status":"ok","service":"story-admin-server"}`。
+7. **组合编排入口**：侧栏「素材管理 → 组合编排」，路由 `/assets/combos`（编辑 `/assets/combos/:id`）；API 前缀 `/api/combos`。
 
 ### 使用端 / 双端一并启动
 
@@ -82,7 +84,10 @@ npm run dev
 
 素材模块（首期）：API 联调 smoke **PASS**；浏览器 UI 点验 **PARTIAL**（详见 `.superpowers/sdd/task-9-report.md` / 计划文末 §9 表）。
 
+组合编排（首期）：API + 单测 smoke **PASS**；浏览器预览/循环点验 **PARTIAL**（详见 `.superpowers/sdd/task-7-report.md` / `docs/superpowers/plans/2026-08-13-asset-combo.md` 文末 §9 表）。
+
 ## 当前基础能力
 
 - 使用端：`/api/health` 健康检查；前端首页与后端连通状态。
 - 管理端（素材首期）：分类/素材上传与预览、拖拽排序与跨分类、标签与人物关联、回收站、AI 参考区（无真模型）、系统配置 CRUD + 默认回退、人物基础 CRUD。
+- 管理端（组合编排首期）：组合 CRUD、成员 1..n、播放序列/默认间隔/步进停留、循环预览、素材硬删组合引用拦截（409）。
