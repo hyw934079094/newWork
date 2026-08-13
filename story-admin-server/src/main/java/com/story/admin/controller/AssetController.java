@@ -97,6 +97,12 @@ public class AssetController {
     assetService.hardDelete(id);
   }
 
+  @PostMapping(value = "/{id}/content", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public Asset replaceContent(
+      @PathVariable Long id, @RequestParam("file") MultipartFile file) {
+    return assetService.replaceContent(id, file);
+  }
+
   @GetMapping("/{id}/content")
   public ResponseEntity<Resource> content(@PathVariable Long id) {
     Asset asset = assetService.get(id);

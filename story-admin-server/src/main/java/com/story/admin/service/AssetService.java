@@ -164,6 +164,23 @@ public class AssetService {
   }
 
   @Transactional
+  public Asset replaceContent(Long id, MultipartFile file) {
+    Asset asset = getRaw(id);
+    if (asset.getStatus() != AssetStatus.NORMAL) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "only NORMAL assets can be replaced");
+    }
+    StoredFile stored = storageService.overwrite(asset.getStoragePath(), file);
+    asset.setOriginalFilename(originalName(file.getOriginalFilename()));
+    asset.setContentType(stored.contentType());
+    asset.setWidth(stored.width());
+    asset.setHeight(stored.height());
+    asset.setSizeBytes(stored.size());
+    asset.setChecksum(stored.checksum());
+    return hydrate(assetRepository.save(asset));
+  }
+
+  @Transactional
   public Asset recycle(Long id) {
     Asset asset = getRaw(id);
     asset.setStatus(AssetStatus.DELETED);

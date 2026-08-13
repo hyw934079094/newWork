@@ -49,6 +49,32 @@ public class StorageService {
   }
 
   public StoredFile store(MultipartFile file) {
+    ValidatedUpload validated = validateUpload(file);
+    LocalDate today = LocalDate.now();
+    String relativePath =
+        "assets/"
+            + today.format(YEAR)
+            + "/"
+            + today.format(MONTH)
+            + "/"
+            + UUID.randomUUID()
+            + "."
+            + validated.ext();
+    writeBytes(relativePath, validated.bytes());
+    return toStoredFile(relativePath, validated);
+  }
+
+  /** Overwrite an existing relative path; validation matches {@link #store(MultipartFile)}. */
+  public StoredFile overwrite(String relativePath, MultipartFile file) {
+    if (relativePath == null || relativePath.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "storage path is required");
+    }
+    ValidatedUpload validated = validateUpload(file);
+    writeBytes(relativePath, validated.bytes());
+    return toStoredFile(relativePath, validated);
+  }
+
+  private ValidatedUpload validateUpload(MultipartFile file) {
     if (file == null || file.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "file is required");
     }
@@ -73,16 +99,6 @@ public class StorageService {
           HttpStatus.BAD_REQUEST,
           "file exceeds max size of " + uploadProperties.getMaxFileSizeMb() + "MB");
     }
-    LocalDate today = LocalDate.now();
-    String relativePath =
-        "assets/" + today.format(YEAR) + "/" + today.format(MONTH) + "/" + UUID.randomUUID() + "." + ext;
-    Path absolute = resolveAbsolute(relativePath);
-    try {
-      Files.createDirectories(absolute.getParent());
-      Files.write(absolute, bytes);
-    } catch (IOException e) {
-      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "failed to store file");
-    }
     Integer width = null;
     Integer height = null;
     try {
@@ -98,8 +114,31 @@ public class StorageService {
     if (contentType == null || contentType.isBlank() || contentType.equals("application/octet-stream")) {
       contentType = CONTENT_TYPES.getOrDefault(ext, "application/octet-stream");
     }
-    return new StoredFile(relativePath, contentType, bytes.length, sha256(bytes), width, height);
+    return new ValidatedUpload(bytes, ext, contentType, width, height);
   }
+
+  private void writeBytes(String relativePath, byte[] bytes) {
+    Path absolute = resolveAbsolute(relativePath);
+    try {
+      Files.createDirectories(absolute.getParent());
+      Files.write(absolute, bytes);
+    } catch (IOException e) {
+      throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "failed to store file");
+    }
+  }
+
+  private static StoredFile toStoredFile(String relativePath, ValidatedUpload validated) {
+    return new StoredFile(
+        relativePath,
+        validated.contentType(),
+        validated.bytes().length,
+        sha256(validated.bytes()),
+        validated.width(),
+        validated.height());
+  }
+
+  private record ValidatedUpload(
+      byte[] bytes, String ext, String contentType, Integer width, Integer height) {}
 
   public Path resolveAbsolute(String relativePath) {
     if (relativePath == null || relativePath.isBlank()) {
