@@ -18,6 +18,7 @@ import {
   updateCategory,
   type AssetCategoryItem,
 } from '../../api/category';
+import { listCharacters, type CharacterItem } from '../../api/character';
 
 const loading = ref(false);
 const uploading = ref(false);
@@ -120,10 +121,14 @@ const categoryForm = reactive({
   name: '',
 });
 
+const characters = ref<CharacterItem[]>([]);
+
 const form = reactive({
   displayName: '',
   description: '',
   chapterRefPlaceholder: '',
+  tagNames: [] as string[],
+  characterIds: [] as number[],
 });
 
 const selectedCategory = computed(
@@ -192,6 +197,8 @@ function syncForm() {
   form.displayName = asset?.displayName ?? '';
   form.description = asset?.description ?? '';
   form.chapterRefPlaceholder = asset?.chapterRefPlaceholder ?? '';
+  form.tagNames = [...(asset?.tagNames ?? [])];
+  form.characterIds = [...(asset?.characterIds ?? [])];
   indexInput.value = currentIndex.value >= 0 ? String(currentIndex.value + 1) : '';
 }
 
@@ -338,6 +345,8 @@ async function saveMeta() {
       displayName: form.displayName.trim(),
       description: form.description.trim() || null,
       chapterRefPlaceholder: form.chapterRefPlaceholder.trim() || null,
+      tagNames: form.tagNames.map((t) => t.trim()).filter(Boolean),
+      characterIds: [...form.characterIds],
     });
     ElMessage.success('已保存');
     await loadAssets(updated.id);
@@ -365,7 +374,8 @@ watch(search, () => {
 
 onMounted(async () => {
   try {
-    await loadCategories();
+    const [chars] = await Promise.all([listCharacters(), loadCategories()]);
+    characters.value = chars;
     await loadAssets();
   } catch (e) {
     ElMessage.error(apiError(e, '加载分类失败'));
@@ -513,6 +523,35 @@ onMounted(async () => {
             </el-form-item>
             <el-form-item label="篇章占位">
               <el-input v-model="form.chapterRefPlaceholder" placeholder="本期仅文本占位" />
+            </el-form-item>
+            <el-form-item label="标签">
+              <el-select
+                v-model="form.tagNames"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                placeholder="输入后回车创建标签"
+                style="width: 100%"
+              />
+            </el-form-item>
+            <el-form-item label="关联人物">
+              <el-select
+                v-model="form.characterIds"
+                multiple
+                filterable
+                clearable
+                placeholder="选择人物"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="c in characters"
+                  :key="c.id"
+                  :label="c.name"
+                  :value="c.id!"
+                />
+              </el-select>
             </el-form-item>
           </el-form>
           <ul class="file-info">

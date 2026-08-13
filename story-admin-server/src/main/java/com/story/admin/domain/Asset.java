@@ -10,7 +10,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "asset")
@@ -69,6 +72,12 @@ public class Asset {
 
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
+
+  @Transient
+  private List<String> tagNames = new ArrayList<>();
+
+  @Transient
+  private List<Long> characterIds = new ArrayList<>();
 
   @PrePersist
   void onCreate() {
@@ -224,5 +233,21 @@ public class Asset {
 
   public void setDeletedAt(LocalDateTime deletedAt) {
     this.deletedAt = deletedAt;
+  }
+
+  public List<String> getTagNames() {
+    return tagNames;
+  }
+
+  public void setTagNames(List<String> tagNames) {
+    this.tagNames = tagNames == null ? new ArrayList<>() : new ArrayList<>(tagNames);
+  }
+
+  public List<Long> getCharacterIds() {
+    return characterIds;
+  }
+
+  public void setCharacterIds(List<Long> characterIds) {
+    this.characterIds = characterIds == null ? new ArrayList<>() : new ArrayList<>(characterIds);
   }
 }

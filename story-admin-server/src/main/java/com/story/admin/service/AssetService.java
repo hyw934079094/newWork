@@ -1,14 +1,22 @@
 package com.story.admin.service;
 
 import com.story.admin.domain.Asset;
+import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetStatus;
+import com.story.admin.domain.AssetTag;
+import com.story.admin.domain.AssetTagRel;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.repository.AssetCategoryRepository;
+import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.AssetTagRelRepository;
+import com.story.admin.repository.AssetTagRepository;
+import com.story.admin.repository.CharacterProfileRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,14 +36,26 @@ public class AssetService {
   private final AssetRepository assetRepository;
   private final AssetCategoryRepository categoryRepository;
   private final StorageService storageService;
+  private final AssetTagRepository tagRepository;
+  private final AssetTagRelRepository tagRelRepository;
+  private final AssetCharacterRelRepository characterRelRepository;
+  private final CharacterProfileRepository characterProfileRepository;
 
   public AssetService(
       AssetRepository assetRepository,
       AssetCategoryRepository categoryRepository,
-      StorageService storageService) {
+      StorageService storageService,
+      AssetTagRepository tagRepository,
+      AssetTagRelRepository tagRelRepository,
+      AssetCharacterRelRepository characterRelRepository,
+      CharacterProfileRepository characterProfileRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
+    this.tagRepository = tagRepository;
+    this.tagRelRepository = tagRelRepository;
+    this.characterRelRepository = characterRelRepository;
+    this.characterProfileRepository = characterProfileRepository;
   }
 
   @Transactional
@@ -69,7 +89,7 @@ public class AssetService {
         asset.setHeight(stored.height());
         asset.setSizeBytes(stored.size());
         asset.setChecksum(stored.checksum());
-        saved.add(assetRepository.save(asset));
+        saved.add(hydrate(assetRepository.save(asset)));
       }
       return saved;
     } catch (RuntimeException ex) {
@@ -81,29 +101,47 @@ public class AssetService {
   public List<Asset> list(Long categoryId, String status, String q) {
     AssetStatus parsed = parseStatus(status);
     String query = q == null ? "" : q.trim();
-    return assetRepository.search(categoryId, parsed, query);
+    return assetRepository.search(categoryId, parsed, query).stream()
+        .map(this::hydrate)
+        .toList();
   }
 
   public Asset get(Long id) {
-    return assetRepository
-        .findById(id)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "asset not found: " + id));
+    return hydrate(
+        assetRepository
+            .findById(id)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "asset not found: " + id)));
   }
 
   @Transactional
   public Asset update(Long id, AssetUpdateRequest req) {
-    if (req == null || req.displayName() == null || req.displayName().isBlank()) {
+    if (req == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
+    }
+    Asset asset = getRaw(id);
+    if (req.displayName() != null) {
+      if (req.displayName().isBlank()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName is required");
+      }
+      asset.setDisplayName(req.displayName().trim());
+      asset.setDescription(blankToNull(req.description()));
+      asset.setChapterRefPlaceholder(blankToNull(req.chapterRefPlaceholder()));
+    } else if (req.tagNames() == null && req.characterIds() == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName is required");
     }
-    Asset asset = get(id);
-    asset.setDisplayName(req.displayName().trim());
-    asset.setDescription(blankToNull(req.description()));
-    asset.setChapterRefPlaceholder(blankToNull(req.chapterRefPlaceholder()));
-    return assetRepository.save(asset);
+    assetRepository.save(asset);
+    if (req.tagNames() != null) {
+      replaceTags(id, req.tagNames());
+    }
+    if (req.characterIds() != null) {
+      replaceCharacters(id, req.characterIds());
+    }
+    return get(id);
   }
 
   public Path resolveContent(Long id) {
-    Asset asset = get(id);
+    Asset asset = getRaw(id);
     return storageService.resolveAbsolute(asset.getStoragePath());
   }
 
@@ -141,7 +179,7 @@ public class AssetService {
     if (targetCategoryId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetCategoryId is required");
     }
-    Asset asset = get(id);
+    Asset asset = getRaw(id);
     if (!categoryRepository.existsById(targetCategoryId)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "category not found: " + targetCategoryId);
     }
@@ -168,6 +206,68 @@ public class AssetService {
       resequence(sourceList);
     }
     resequence(targetList);
+    return hydrate(asset);
+  }
+
+  private void replaceTags(Long assetId, List<String> tagNames) {
+    LinkedHashSet<String> normalized = new LinkedHashSet<>();
+    for (String raw : tagNames) {
+      if (raw == null) {
+        continue;
+      }
+      String name = raw.trim();
+      if (!name.isEmpty()) {
+        normalized.add(name);
+      }
+    }
+    tagRelRepository.deleteByAssetId(assetId);
+    tagRelRepository.flush();
+    for (String name : normalized) {
+      AssetTag tag =
+          tagRepository
+              .findByName(name)
+              .orElseGet(
+                  () -> {
+                    AssetTag created = new AssetTag();
+                    created.setName(name);
+                    return tagRepository.save(created);
+                  });
+      tagRelRepository.save(new AssetTagRel(assetId, tag.getId()));
+    }
+  }
+
+  private void replaceCharacters(Long assetId, List<Long> characterIds) {
+    LinkedHashSet<Long> unique = new LinkedHashSet<>();
+    for (Long characterId : characterIds) {
+      if (characterId != null) {
+        unique.add(characterId);
+      }
+    }
+    for (Long characterId : unique) {
+      if (!characterProfileRepository.existsById(characterId)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "character not found: " + characterId);
+      }
+    }
+    characterRelRepository.deleteByAssetId(assetId);
+    characterRelRepository.flush();
+    for (Long characterId : unique) {
+      characterRelRepository.save(new AssetCharacterRel(assetId, characterId));
+    }
+  }
+
+  private Asset getRaw(Long id) {
+    return assetRepository
+        .findById(id)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "asset not found: " + id));
+  }
+
+  private Asset hydrate(Asset asset) {
+    if (asset == null || asset.getId() == null) {
+      return asset;
+    }
+    asset.setTagNames(tagRelRepository.findTagNamesByAssetId(asset.getId()));
+    asset.setCharacterIds(characterRelRepository.findCharacterIdsByAssetId(asset.getId()));
     return asset;
   }
 

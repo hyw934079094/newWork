@@ -16,6 +16,8 @@ export interface AssetItem {
   sizeBytes: number | null;
   checksum: string | null;
   chapterRefPlaceholder: string | null;
+  tagNames?: string[];
+  characterIds?: number[];
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string | null;
@@ -25,6 +27,8 @@ export interface AssetUpdatePayload {
   displayName: string;
   description: string | null;
   chapterRefPlaceholder: string | null;
+  tagNames: string[];
+  characterIds: number[];
 }
 
 const client = axios.create({ baseURL: '/api' });
