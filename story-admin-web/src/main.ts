@@ -1,2 +1,8 @@
-import { createApp } from 'vue'; import { createRouter, createWebHistory } from 'vue-router'; import App from './App.vue'; import Dashboard from './views/Dashboard.vue'; import './style.css';
-const router = createRouter({ history: createWebHistory(), routes: [{ path: '/', component: Dashboard }] }); createApp(App).use(router).mount('#app');
+import { createApp } from 'vue';
+import ElementPlus from 'element-plus';
+import 'element-plus/dist/index.css';
+import App from './App.vue';
+import router from './router';
+import './style.css';
+
+createApp(App).use(router).use(ElementPlus).mount('#app');

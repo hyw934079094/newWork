@@ -1,2 +1,25 @@
-<script setup lang="ts">import { onMounted, ref } from 'vue'; const online=ref(false); onMounted(async()=>{try{online.value=(await fetch('/api/health')).ok}catch{online.value=false}})</script>
-<template><section><p class="eyebrow">DASHBOARD</p><h2>管理概览</h2><div class="cards"><article><b>故事</b><strong>0</strong></article><article><b>素材</b><strong>0</strong></article><article><b>服务状态</b><strong>{{online?'正常':'未启动'}}</strong></article></div></section></template>
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+
+const online = ref(false);
+
+onMounted(async () => {
+  try {
+    online.value = (await fetch('/api/health')).ok;
+  } catch {
+    online.value = false;
+  }
+});
+</script>
+
+<template>
+  <section>
+    <p class="eyebrow">DASHBOARD</p>
+    <h2>管理概览</h2>
+    <div class="cards">
+      <article><b>故事</b><strong>0</strong></article>
+      <article><b>素材</b><strong>0</strong></article>
+      <article><b>服务状态</b><strong>{{ online ? '正常' : '未启动' }}</strong></article>
+    </div>
+  </section>
+</template>
