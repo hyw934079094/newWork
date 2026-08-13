@@ -2,11 +2,13 @@ import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '../views/Dashboard.vue';
 import SysConfig from '../views/config/SysConfig.vue';
 import CharacterList from '../views/characters/CharacterList.vue';
+import AssetWorkbench from '../views/assets/AssetWorkbench.vue';
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'dashboard', component: Dashboard },
+    { path: '/assets', name: 'assets', component: AssetWorkbench },
     { path: '/characters', name: 'characters', component: CharacterList },
     { path: '/config', name: 'sys-config', component: SysConfig },
   ],

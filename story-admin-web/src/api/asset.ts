@@ -1,0 +1,65 @@
+import axios from 'axios';
+
+export interface AssetItem {
+  id: number;
+  displayName: string;
+  categoryId: number;
+  seriesId: number | null;
+  sortOrder: number;
+  status: string;
+  description: string | null;
+  originalFilename: string | null;
+  storagePath: string;
+  contentType: string | null;
+  width: number | null;
+  height: number | null;
+  sizeBytes: number | null;
+  checksum: string | null;
+  chapterRefPlaceholder: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+}
+
+export interface AssetUpdatePayload {
+  displayName: string;
+  description: string | null;
+  chapterRefPlaceholder: string | null;
+}
+
+const client = axios.create({ baseURL: '/api' });
+
+export function assetContentUrl(id: number): string {
+  return `/api/assets/${id}/content`;
+}
+
+export async function listAssets(params: {
+  categoryId?: number;
+  status?: string;
+  q?: string;
+}): Promise<AssetItem[]> {
+  const { data } = await client.get<AssetItem[]>('/assets', { params });
+  return data;
+}
+
+export async function getAsset(id: number): Promise<AssetItem> {
+  const { data } = await client.get<AssetItem>(`/assets/${id}`);
+  return data;
+}
+
+export async function updateAsset(id: number, body: AssetUpdatePayload): Promise<AssetItem> {
+  const { data } = await client.put<AssetItem>(`/assets/${id}`, body);
+  return data;
+}
+
+export async function uploadAssets(categoryId: number, files: File[]): Promise<AssetItem[]> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append('files', file);
+  }
+  const { data } = await client.post<AssetItem[]>('/assets/upload', form, {
+    params: { categoryId },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
