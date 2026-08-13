@@ -12,6 +12,8 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
 
   boolean existsByCategoryId(Long categoryId);
 
+  List<Asset> findAllByCategoryIdAndStatusOrderBySortOrderAsc(Long categoryId, AssetStatus status);
+
   @Query("select coalesce(max(a.sortOrder), -1) from Asset a where a.categoryId = :categoryId")
   Optional<Integer> findMaxSortOrderByCategoryId(@Param("categoryId") Long categoryId);
 

@@ -8,8 +8,14 @@ import com.story.admin.repository.AssetRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -99,6 +105,78 @@ public class AssetService {
   public Path resolveContent(Long id) {
     Asset asset = get(id);
     return storageService.resolveAbsolute(asset.getStoragePath());
+  }
+
+  @Transactional
+  public void reorder(Long categoryId, List<Long> orderedIds) {
+    if (categoryId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "categoryId is required");
+    }
+    if (orderedIds == null || orderedIds.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedIds is required");
+    }
+    if (orderedIds.stream().anyMatch(Objects::isNull) || new HashSet<>(orderedIds).size() != orderedIds.size()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedIds must be unique and non-null");
+    }
+    if (!categoryRepository.existsById(categoryId)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "category not found: " + categoryId);
+    }
+    List<Asset> current =
+        assetRepository.findAllByCategoryIdAndStatusOrderBySortOrderAsc(categoryId, AssetStatus.NORMAL);
+    Set<Long> currentIds = current.stream().map(Asset::getId).collect(Collectors.toSet());
+    if (currentIds.size() != orderedIds.size() || !currentIds.containsAll(orderedIds)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "orderedIds must match all assets in the category");
+    }
+    Map<Long, Asset> byId = current.stream().collect(Collectors.toMap(Asset::getId, Function.identity()));
+    for (int i = 0; i < orderedIds.size(); i++) {
+      Asset asset = byId.get(orderedIds.get(i));
+      asset.setSortOrder(i);
+      assetRepository.save(asset);
+    }
+  }
+
+  @Transactional
+  public Asset move(Long id, Long targetCategoryId, int targetIndex) {
+    if (targetCategoryId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetCategoryId is required");
+    }
+    Asset asset = get(id);
+    if (!categoryRepository.existsById(targetCategoryId)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "category not found: " + targetCategoryId);
+    }
+    Long sourceCategoryId = asset.getCategoryId();
+    boolean sameCategory = sourceCategoryId.equals(targetCategoryId);
+    List<Asset> sourceList =
+        new ArrayList<>(
+            assetRepository.findAllByCategoryIdAndStatusOrderBySortOrderAsc(
+                sourceCategoryId, AssetStatus.NORMAL));
+    List<Asset> targetList =
+        sameCategory
+            ? sourceList
+            : new ArrayList<>(
+                assetRepository.findAllByCategoryIdAndStatusOrderBySortOrderAsc(
+                    targetCategoryId, AssetStatus.NORMAL));
+    sourceList.removeIf(item -> item.getId().equals(id));
+    if (!sameCategory) {
+      targetList.removeIf(item -> item.getId().equals(id));
+      asset.setCategoryId(targetCategoryId);
+    }
+    int insertAt = Math.max(0, Math.min(targetIndex, targetList.size()));
+    targetList.add(insertAt, asset);
+    if (!sameCategory) {
+      resequence(sourceList);
+    }
+    resequence(targetList);
+    return asset;
+  }
+
+  private void resequence(List<Asset> assets) {
+    for (int i = 0; i < assets.size(); i++) {
+      Asset item = assets.get(i);
+      item.setSortOrder(i);
+      assetRepository.save(item);
+    }
   }
 
   private static AssetStatus parseStatus(String status) {

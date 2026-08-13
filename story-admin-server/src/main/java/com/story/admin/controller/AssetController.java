@@ -1,6 +1,8 @@
 package com.story.admin.controller;
 
 import com.story.admin.domain.Asset;
+import com.story.admin.dto.AssetMoveRequest;
+import com.story.admin.dto.AssetReorderRequest;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.service.AssetService;
 import java.io.IOException;
@@ -41,6 +43,14 @@ public class AssetController {
     return assetService.upload(categoryId, files);
   }
 
+  @PutMapping("/reorder")
+  public void reorder(@RequestBody AssetReorderRequest body) {
+    if (body == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
+    }
+    assetService.reorder(body.categoryId(), body.orderedIds());
+  }
+
   @GetMapping
   public List<Asset> list(
       @RequestParam(required = false) Long categoryId,
@@ -57,6 +67,14 @@ public class AssetController {
   @PutMapping("/{id}")
   public Asset update(@PathVariable Long id, @RequestBody AssetUpdateRequest body) {
     return assetService.update(id, body);
+  }
+
+  @PutMapping("/{id}/move")
+  public Asset move(@PathVariable Long id, @RequestBody AssetMoveRequest body) {
+    if (body == null || body.targetIndex() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "targetIndex is required");
+    }
+    return assetService.move(id, body.targetCategoryId(), body.targetIndex());
   }
 
   @GetMapping("/{id}/content")

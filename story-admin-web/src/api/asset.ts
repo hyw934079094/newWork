@@ -63,3 +63,18 @@ export async function uploadAssets(categoryId: number, files: File[]): Promise<A
   });
   return data;
 }
+
+export async function reorderAssets(body: {
+  categoryId: number;
+  orderedIds: number[];
+}): Promise<void> {
+  await client.put('/assets/reorder', body);
+}
+
+export async function moveAsset(
+  id: number,
+  body: { targetCategoryId: number; targetIndex: number },
+): Promise<AssetItem> {
+  const { data } = await client.put<AssetItem>(`/assets/${id}/move`, body);
+  return data;
+}

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import draggable from 'vuedraggable';
 import {
   assetContentUrl,
   listAssets,
+  moveAsset,
+  reorderAssets,
   updateAsset,
   uploadAssets,
   type AssetItem,
@@ -26,6 +29,84 @@ const selectedAssetId = ref<number | null>(null);
 const search = ref('');
 const indexInput = ref('1');
 const fileInput = ref<HTMLInputElement | null>(null);
+const categoryBuckets = reactive<Record<number, AssetItem[]>>({});
+const dragging = ref(false);
+const thumbGroup = { name: 'assets', pull: true, put: false };
+const categoryGroup = { name: 'assets', pull: false, put: true };
+
+type DragChangeEvent = {
+  added?: { element: AssetItem; newIndex: number };
+  removed?: { element: AssetItem; oldIndex: number };
+  moved?: { element: AssetItem; oldIndex: number; newIndex: number };
+};
+
+let dragSnapshot: AssetItem[] = [];
+let dragEndedAt = 0;
+
+function bucketFor(categoryId: number): AssetItem[] {
+  if (!categoryBuckets[categoryId]) {
+    categoryBuckets[categoryId] = [];
+  }
+  return categoryBuckets[categoryId];
+}
+
+function clearBuckets() {
+  for (const key of Object.keys(categoryBuckets)) {
+    const bucket = categoryBuckets[Number(key)];
+    bucket.splice(0, bucket.length);
+  }
+}
+
+function restoreDragSnapshot() {
+  assets.value = dragSnapshot.map((item) => ({ ...item }));
+  clearBuckets();
+}
+
+function onDragStart() {
+  dragging.value = true;
+  dragSnapshot = assets.value.map((item) => ({ ...item }));
+}
+
+function onDragEnd() {
+  dragging.value = false;
+  dragEndedAt = Date.now();
+}
+
+async function onThumbsChange(evt: DragChangeEvent) {
+  if (!evt.moved || selectedCategoryId.value == null) return;
+  try {
+    await reorderAssets({
+      categoryId: selectedCategoryId.value,
+      orderedIds: assets.value.map((item) => item.id),
+    });
+  } catch (e) {
+    restoreDragSnapshot();
+    ElMessage.error(apiError(e, '排序失败'));
+  }
+}
+
+async function onDropOnCategory(categoryId: number, evt: DragChangeEvent) {
+  if (!evt.added) return;
+  const item = evt.added.element;
+  const bucket = bucketFor(categoryId);
+  bucket.splice(0, bucket.length);
+  if (categoryId === selectedCategoryId.value) {
+    restoreDragSnapshot();
+    return;
+  }
+  try {
+    await moveAsset(item.id, {
+      targetCategoryId: categoryId,
+      targetIndex: evt.added.newIndex ?? 0,
+    });
+    ElMessage.success('已移动到目标分类');
+    const keepId = selectedAssetId.value === item.id ? null : selectedAssetId.value;
+    await loadAssets(keepId);
+  } catch (e) {
+    restoreDragSnapshot();
+    ElMessage.error(apiError(e, '移动失败'));
+  }
+}
 
 const categoryDialogVisible = ref(false);
 const categoryEditing = ref(false);
@@ -62,6 +143,9 @@ function apiError(e: unknown, fallback: string): string {
 
 async function loadCategories(preferId?: number | null) {
   categories.value = await listCategories();
+  for (const cat of categories.value) {
+    bucketFor(cat.id);
+  }
   const keep =
     preferId != null && categories.value.some((c) => c.id === preferId)
       ? preferId
@@ -115,6 +199,7 @@ watch(selectedAssetId, async () => {
 });
 
 async function selectCategory(id: number) {
+  if (Date.now() - dragEndedAt < 300) return;
   selectedCategoryId.value = id;
   await loadAssets();
 }
@@ -323,25 +408,40 @@ onMounted(async () => {
           <el-button link type="primary" @click="openCreateCategory">新增</el-button>
         </div>
         <ul>
-          <li
+          <draggable
             v-for="cat in categories"
             :key="cat.id"
-            :class="{ active: cat.id === selectedCategoryId }"
+            tag="li"
+            :list="bucketFor(cat.id)"
+            item-key="id"
+            :group="categoryGroup"
+            :animation="150"
+            :empty-insert-threshold="48"
+            class="category-drop"
+            :class="{ active: cat.id === selectedCategoryId, 'drop-ready': dragging }"
+            @change="onDropOnCategory(cat.id, $event)"
             @click="selectCategory(cat.id)"
           >
-            <span class="cat-name">{{ cat.name }}</span>
-            <span class="cat-actions">
-              <el-button link type="primary" @click.stop="openEditCategory(cat)">改名</el-button>
-              <el-button
-                v-if="!cat.systemPreset"
-                link
-                type="danger"
-                @click.stop="removeCategory(cat)"
-              >
-                删
-              </el-button>
-            </span>
-          </li>
+            <template #header>
+              <div class="cat-row">
+                <span class="cat-name">{{ cat.name }}</span>
+                <span class="cat-actions" @click.stop>
+                  <el-button link type="primary" @click="openEditCategory(cat)">改名</el-button>
+                  <el-button
+                    v-if="!cat.systemPreset"
+                    link
+                    type="danger"
+                    @click="removeCategory(cat)"
+                  >
+                    删
+                  </el-button>
+                </span>
+              </div>
+            </template>
+            <template #item="{ element }">
+              <span class="drop-chip">{{ element.displayName }}</span>
+            </template>
+          </draggable>
         </ul>
         <p v-if="!categories.length" class="empty">暂无分类</p>
       </aside>
@@ -366,20 +466,30 @@ onMounted(async () => {
           </div>
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
-        <div class="thumbs">
-          <button
-            v-for="(item, idx) in assets"
-            :key="item.id"
-            type="button"
-            class="thumb"
-            :class="{ active: item.id === selectedAssetId }"
-            :data-thumb-id="item.id"
-            :title="`${idx + 1}. ${item.displayName}`"
-            @click="selectAsset(item.id)"
-          >
-            <img :src="assetContentUrl(item.id)" :alt="item.displayName" />
-          </button>
-        </div>
+        <draggable
+          v-model="assets"
+          item-key="id"
+          :group="thumbGroup"
+          :animation="150"
+          class="thumbs"
+          ghost-class="thumb-ghost"
+          @start="onDragStart"
+          @end="onDragEnd"
+          @change="onThumbsChange"
+        >
+          <template #item="{ element, index }">
+            <button
+              type="button"
+              class="thumb"
+              :class="{ active: element.id === selectedAssetId }"
+              :data-thumb-id="element.id"
+              :title="`${index + 1}. ${element.displayName}`"
+              @click="selectAsset(element.id)"
+            >
+              <img :src="assetContentUrl(element.id)" :alt="element.displayName" />
+            </button>
+          </template>
+        </draggable>
       </section>
 
       <aside class="pane editor">
@@ -482,19 +592,29 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
 }
-.categories li {
+.category-drop {
+  min-height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.category-drop.active {
+  background: #eef3ff;
+  color: #3b5bcc;
+  font-weight: 600;
+}
+.category-drop.drop-ready {
+  outline: 1px dashed #9aa8d9;
+  outline-offset: -1px;
+}
+.cat-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 10px;
-  cursor: pointer;
 }
-.categories li.active {
-  background: #eef3ff;
-  color: #3b5bcc;
-  font-weight: 600;
+.drop-chip {
+  display: none;
 }
 .cat-name {
   overflow: hidden;
@@ -546,6 +666,7 @@ onMounted(async () => {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 6px;
+  min-height: 80px;
 }
 .thumb {
   flex: 0 0 auto;
@@ -555,8 +676,11 @@ onMounted(async () => {
   border: 2px solid transparent;
   border-radius: 10px;
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
   background: #f4f6fa;
+}
+.thumb-ghost {
+  opacity: 0.4;
 }
 .thumb.active {
   border-color: #3b5bcc;
