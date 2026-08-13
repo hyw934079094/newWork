@@ -34,7 +34,7 @@
    ```
 
    关键键：`spring.datasource.url/username/password`。默认 `spring.profiles.active=local`。
-3. **文件存储**：仓库根目录 `storage/`（已 gitignore；库内仅存相对路径）。默认 `story.storage.root=../storage`。
+3. **文件存储**：仓库根目录 `storage/`（**纳入 Git**；数据库仅存相对路径与元数据）。默认 `story.storage.root=../storage`。管理端上传/移入回收站/硬删后，请同步提交 `storage/` 变更。
 4. **后端**（端口 **8081**）：
 
    ```bash

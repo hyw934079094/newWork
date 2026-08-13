@@ -1,7 +1,7 @@
 .idea/
 .vscode/
-storage/**
-!storage/.gitkeep
+# 素材库 storage/ 纳入 Git 管理（上传/删除后请提交）
+pic/
 **/target/
 **/node_modules/
 **/dist/
@@ -9,3 +9,7 @@ storage/**
 .DS_Store
 tLog/
 .superpowers/
+# vue-tsc emit junk
+story-admin-web/src/**/*.js
+story-admin-web/tsconfig.tsbuildinfo
+
