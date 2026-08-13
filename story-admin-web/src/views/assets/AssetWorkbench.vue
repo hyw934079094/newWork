@@ -26,6 +26,8 @@ const assets = ref<AssetItem[]>([]);
 const selectedCategoryId = ref<number | null>(null);
 const selectedAssetId = ref<number | null>(null);
 const search = ref('');
+/** 无关联 | 具体人物 id | 全部 */
+const characterFilter = ref<'unlinked' | 'all' | number>('unlinked');
 const indexInput = ref('1');
 const fileInput = ref<HTMLInputElement | null>(null);
 const categoryBuckets = reactive<Record<number, AssetItem[]>>({});
@@ -134,7 +136,10 @@ const canPrev = computed(() => currentIndex.value > 0);
 const canNext = computed(
   () => currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1,
 );
-const isSearchActive = computed(() => search.value.trim().length > 0);
+/** q 非空或人物不是「全部」时禁用本分类内排序 */
+const isSearchActive = computed(
+  () => search.value.trim().length > 0 || characterFilter.value !== 'all',
+);
 
 function apiError(e: unknown, fallback: string): string {
   const err = e as { response?: { data?: { message?: string } } };
@@ -164,11 +169,17 @@ async function loadAssets(keepId?: number | null) {
   }
   loading.value = true;
   try {
-    assets.value = await listAssets({
+    const listParams: Parameters<typeof listAssets>[0] = {
       categoryId: selectedCategoryId.value,
       status: 'NORMAL',
       q: search.value.trim() || undefined,
-    });
+    };
+    if (typeof characterFilter.value === 'number') {
+      listParams.characterId = characterFilter.value;
+    } else {
+      listParams.characterFilter = characterFilter.value;
+    }
+    assets.value = await listAssets(listParams);
     const preferred = keepId ?? selectedAssetId.value;
     if (preferred != null && assets.value.some((a) => a.id === preferred)) {
       selectedAssetId.value = preferred;
@@ -316,6 +327,10 @@ watch(search, () => {
   }, 250);
 });
 
+watch(characterFilter, () => {
+  void loadAssets();
+});
+
 onMounted(async () => {
   try {
     const [chars] = await Promise.all([listCharacters(), loadCategories()]);
@@ -335,6 +350,20 @@ onMounted(async () => {
         <h2>素材管理</h2>
       </div>
       <div class="toolbar-actions">
+        <el-select
+          v-model="characterFilter"
+          placeholder="人物筛选"
+          style="width: 160px"
+        >
+          <el-option label="无关联" value="unlinked" />
+          <el-option
+            v-for="c in characters"
+            :key="c.id"
+            :label="c.name"
+            :value="c.id!"
+          />
+          <el-option label="全部" value="all" />
+        </el-select>
         <el-input
           v-model="search"
           clearable
@@ -419,7 +448,7 @@ onMounted(async () => {
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
         <p v-if="isSearchActive" class="search-reorder-hint">
-          搜索状态下不可在本分类内排序；清空搜索后可拖拽排序，仍可将素材拖到左侧其它分类。
+          搜索或人物非「全部」时不可在本分类内排序；人物选「全部」且清空搜索后可拖拽排序，仍可将素材拖到左侧其它分类。
         </p>
         <draggable
           v-model="assets"

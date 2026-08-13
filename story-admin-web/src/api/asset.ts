@@ -41,6 +41,8 @@ export async function listAssets(params: {
   categoryId?: number;
   status?: string;
   q?: string;
+  characterFilter?: 'unlinked' | 'all';
+  characterId?: number;
 }): Promise<AssetItem[]> {
   const { data } = await client.get<AssetItem[]>('/assets', { params });
   return data;
