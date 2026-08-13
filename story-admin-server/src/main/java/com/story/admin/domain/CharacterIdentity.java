@@ -11,8 +11,8 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "character_profile")
-public class CharacterProfile {
+@Table(name = "character_identity")
+public class CharacterIdentity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,21 +24,6 @@ public class CharacterProfile {
   @Column(nullable = false, length = 100)
   private String name;
 
-  @Column(length = 200)
-  private String alias;
-
-  @Column(length = 20)
-  private String gender;
-
-  @Column(name = "age_stage", length = 50)
-  private String ageStage;
-
-  @Column(length = 50)
-  private String race;
-
-  @Column(length = 100)
-  private String occupation;
-
   @Column(name = "story_name", length = 200)
   private String storyName;
 
@@ -47,12 +32,6 @@ public class CharacterProfile {
 
   @Column(name = "internal_note", columnDefinition = "TEXT")
   private String internalNote;
-
-  @Column(name = "identity_id")
-  private Long identityId;
-
-  @Column(name = "form_label", length = 50)
-  private String formLabel;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
@@ -96,46 +75,6 @@ public class CharacterProfile {
     this.name = name;
   }
 
-  public String getAlias() {
-    return alias;
-  }
-
-  public void setAlias(String alias) {
-    this.alias = alias;
-  }
-
-  public String getGender() {
-    return gender;
-  }
-
-  public void setGender(String gender) {
-    this.gender = gender;
-  }
-
-  public String getAgeStage() {
-    return ageStage;
-  }
-
-  public void setAgeStage(String ageStage) {
-    this.ageStage = ageStage;
-  }
-
-  public String getRace() {
-    return race;
-  }
-
-  public void setRace(String race) {
-    this.race = race;
-  }
-
-  public String getOccupation() {
-    return occupation;
-  }
-
-  public void setOccupation(String occupation) {
-    this.occupation = occupation;
-  }
-
   public String getStoryName() {
     return storyName;
   }
@@ -158,22 +97,6 @@ public class CharacterProfile {
 
   public void setInternalNote(String internalNote) {
     this.internalNote = internalNote;
-  }
-
-  public Long getIdentityId() {
-    return identityId;
-  }
-
-  public void setIdentityId(Long identityId) {
-    this.identityId = identityId;
-  }
-
-  public String getFormLabel() {
-    return formLabel;
-  }
-
-  public void setFormLabel(String formLabel) {
-    this.formLabel = formLabel;
   }
 
   public LocalDateTime getCreatedAt() {

@@ -1,6 +1,7 @@
 package com.story.admin.repository;
 
 import com.story.admin.domain.CharacterProfile;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -11,4 +12,8 @@ public interface CharacterProfileRepository
 
   @Query("select max(c.code) from CharacterProfile c")
   Optional<String> findMaxCode();
+
+  List<CharacterProfile> findByIdentityIdOrderByIdAsc(Long identityId);
+
+  long countByIdentityId(Long identityId);
 }
