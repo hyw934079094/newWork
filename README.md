@@ -78,6 +78,10 @@ npm run dev
 
 使用端前端运行于 `http://localhost:5173`，管理端前端运行于 `http://localhost:5174`。开发服务器已分别代理 `/api` 到对应后端。
 
+## 当前状态
+
+素材模块（首期）：API 联调 smoke **PASS**；浏览器 UI 点验 **PARTIAL**（详见 `.superpowers/sdd/task-9-report.md` / 计划文末 §9 表）。
+
 ## 当前基础能力
 
 - 使用端：`/api/health` 健康检查；前端首页与后端连通状态。

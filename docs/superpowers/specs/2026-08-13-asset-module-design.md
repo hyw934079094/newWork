@@ -1,7 +1,7 @@
 # 管理端素材模块（标准首期）设计说明
 
 > 日期：2026-08-13  
-> 状态：已实现（首期）；实现计划见 `docs/superpowers/plans/2026-08-13-asset-module.md`  
+> 状态：已实现（首期）；§9 UI 点验 PARTIAL，详见 Task 9 报告 / 计划文末；实现计划见 `docs/superpowers/plans/2026-08-13-asset-module.md`  
 > 关联：`docs/PROJECT_REQUIREMENTS.md`（需求基线 v0.2）  
 > 实现路线：A（前后端一体推进）
 

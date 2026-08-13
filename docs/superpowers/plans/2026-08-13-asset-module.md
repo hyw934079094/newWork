@@ -534,7 +534,7 @@ git commit -m "feat: AI reference session without model calls"
 
 **Interfaces:** 无新接口
 
-- [ ] **Step 1: 按设计第 9 节逐条手工验收**，记录结果到计划文末或 PR 描述
+- [x] **Step 1: 按设计第 9 节逐条手工验收**，记录结果到计划文末或 PR 描述
 
 验收清单：
 
@@ -546,9 +546,9 @@ git commit -m "feat: AI reference session without model calls"
 6. 人物 CRUD  
 7. 配置 CRUD + 默认回退  
 
-- [ ] **Step 2: 更新 README 启动说明**
+- [x] **Step 2: 更新 README 启动说明**
 
-- [ ] **Step 3: Commit**（用户要求时）
+- [x] **Step 3: Commit**（用户要求时）
 
 ```bash
 git commit -m "docs: record asset module local runbook and completion status"
@@ -577,3 +577,55 @@ git commit -m "docs: record asset module local runbook and completion status"
 - 表名使用 `character_profile`，避免 SQL 保留字；API 路径仍为 `/api/characters`
 - 密码仅出现在本地 `application-local.yml`
 - 提交步骤默认「仅当用户要求时执行」，以符合仓库协作习惯
+
+---
+
+## Task 9 验收结果（设计 §9）
+
+**Branch:** `feature/asset-module` · **Date:** 2026-08-13 · **Env:** JDK 24.0.1, MySQL `story_admin`, admin API `http://localhost:8081`
+
+### Unit tests
+
+```text
+mvn test  (JAVA_HOME=D:\jdk\jdk-24.0.1)
+Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+### API smoke（对运行中服务）
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| `GET /api/health` | PASS | `{"status":"ok","service":"story-admin-server"}` |
+| Configs CRUD | PASS | create/update/delete `smoke.test.*` |
+| Config 默认回退 | PASS | 空表 + `ConfigServiceTest` / yml defaults |
+| Categories 预置 | PASS | 5 条，含 `expression` |
+| Characters CRUD | PASS | create/update id=3（cleanup 时若仍挂人物关联，delete 可能 500） |
+| Assets upload + content | PASS | 1×1 PNG → id + `GET /content` 200 |
+| Rename/desc/tags/characters | PASS | `PUT /api/assets/{id}` → `smoke-renamed` |
+| Reorder | PASS | `PUT /api/assets/reorder` 同序保持 |
+| Cross-category move | PASS | move to cat2 then back to cat1 |
+| AI reference persist | PASS | `PUT /api/ai-reference/current/items` items≥1 |
+| Recycle + restore | PASS | status DELETED → NORMAL |
+| Hard delete (无引用) | PASS | clean cycle asset id=5 → HTTP 204 |
+| Hard delete 引用拦截 | PASS | AI 参考项占用 → HTTP 409 |
+
+原始摘要：`.superpowers/sdd/task-9-smoke.json`
+
+### 设计第 9 节验收清单
+
+| # | 项 | 结果 | 说明 |
+|---|----|------|------|
+| 1 | 多图上传 + 预览/缩略图/序号 | PARTIAL | API 上传+content PASS |
+| 1a | 多文件上传 UI（浏览器） | NOT TESTED | 未在浏览器中多选上传并确认列表刷新 |
+| 1b | 主预览/缩略图/序号切换（浏览器 smoke） | NOT TESTED | 未点击验证主预览、缩略图条与序号/上下切换 |
+| 2 | 拖拽排序与跨分类，刷新保持；失败回滚 | PARTIAL | API reorder/move PASS |
+| 2a | 浏览器拖拽排序 + 刷新持久 | NOT TESTED | 未在 UI 拖拽后刷新页面核对顺序 |
+| 2b | 失败回滚 UI 提示 | NOT TESTED | 未模拟 API 失败触发 `ElMessage.error` 与 UI 回滚 |
+| 3 | 重命名/说明/标签/关联人物 | PARTIAL | API update PASS；**页面表单未点** |
+| 4 | 回收站恢复与硬删；引用拦截 | PARTIAL | API recycle/restore/hardDelete/409 PASS；**回收站页未点** |
+| 5 | AI 参考区持久化 | PARTIAL | API persist PASS；**AI 参考区 UI 未点** |
+| 6 | 人物 CRUD | PARTIAL | API CRUD PASS；**人物管理页未点** |
+| 7 | 配置 CRUD + 默认回退 | PARTIAL | API + 单测 PASS；**配置页未点** |
+
+> 完整报告：`.superpowers/sdd/task-9-report.md`
