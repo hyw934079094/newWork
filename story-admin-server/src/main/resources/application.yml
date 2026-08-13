@@ -1,6 +1,27 @@
 spring:
   application:
     name: story-admin-server
+  profiles:
+    active: local
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+story:
+  storage:
+    root: ../storage
+  upload:
+    max-file-size-mb: 20
+    allowed-extensions: jpg,jpeg,png,webp,gif
 server:
   port: 8081
-
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 100MB
