@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { AssetItem } from './asset';
+import type { IdentityDetail } from './characterIdentity';
 
 export interface CharacterItem {
   id?: number;
@@ -13,6 +14,8 @@ export interface CharacterItem {
   storyName: string | null;
   publicIntro: string | null;
   internalNote: string | null;
+  identityId?: number | null;
+  formLabel?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -26,6 +29,27 @@ export interface CharacterListQuery {
   ageStage?: string;
   race?: string;
   occupation?: string;
+  identityId?: number;
+}
+
+/** Nested character for POST /characters/{id}/forms */
+export interface CharacterFormNewCharacter {
+  name: string;
+  formLabel?: string | null;
+  alias?: string | null;
+  gender?: string | null;
+  ageStage?: string | null;
+  race?: string | null;
+  occupation?: string | null;
+  storyName?: string | null;
+  publicIntro?: string | null;
+  internalNote?: string | null;
+}
+
+export interface CharacterAddFormPayload {
+  identityName?: string | null;
+  originalFormLabel?: string | null;
+  newCharacter: CharacterFormNewCharacter;
 }
 
 const client = axios.create({ baseURL: '/api' });
@@ -52,6 +76,14 @@ export async function updateCharacter(id: number, body: CharacterPayload): Promi
 
 export async function deleteCharacter(id: number): Promise<void> {
   await client.delete(`/characters/${id}`);
+}
+
+export async function addCharacterForm(
+  id: number,
+  body: CharacterAddFormPayload,
+): Promise<IdentityDetail> {
+  const { data } = await client.post<IdentityDetail>(`/characters/${id}/forms`, body);
+  return data;
 }
 
 export async function listCharacterAssets(id: number): Promise<AssetItem[]> {

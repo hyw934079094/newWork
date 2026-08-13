@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
 import {
+  addCharacterForm,
   createCharacter,
   deleteCharacter,
   listCharacterAssets,
@@ -12,9 +14,12 @@ import {
   uploadCharacterAssets,
   type CharacterItem,
 } from '../../api/character';
+import { listIdentities } from '../../api/characterIdentity';
 
+const router = useRouter();
 const loading = ref(false);
 const rows = ref<CharacterItem[]>([]);
+const identityNameById = ref(new Map<number, string>());
 const dialogVisible = ref(false);
 const editing = ref(false);
 const editingId = ref<number | null>(null);
@@ -30,6 +35,24 @@ const previewVisible = ref(false);
 const previewTitle = ref('');
 const previewAssets = ref<AssetItem[]>([]);
 const previewIndex = ref(0);
+
+const formDialogVisible = ref(false);
+const formSaving = ref(false);
+const formSource = ref<CharacterItem | null>(null);
+const formDialog = reactive({
+  identityName: '',
+  originalFormLabel: '默认',
+  name: '',
+  formLabel: '',
+  alias: '',
+  gender: '',
+  ageStage: '',
+  race: '',
+  occupation: '',
+  storyName: '',
+  publicIntro: '',
+  internalNote: '',
+});
 
 const filters = reactive({
   q: '',
@@ -53,6 +76,22 @@ const form = reactive({
 
 const previewAsset = computed(() => previewAssets.value[previewIndex.value] ?? null);
 const canManageAssets = computed(() => editingId.value != null);
+const formHasIdentity = computed(() => formSource.value?.identityId != null);
+
+function apiError(e: unknown, fallback: string): string {
+  const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return msg || fallback;
+}
+
+function formatIdentityCell(row: CharacterItem): string {
+  if (row.identityId == null) return '';
+  const identityName = identityNameById.value.get(row.identityId)?.trim() || '';
+  const label = row.formLabel?.trim() || '';
+  if (identityName && label) return `${identityName} · ${label}`;
+  if (identityName) return identityName;
+  if (label) return label;
+  return `#${row.identityId}`;
+}
 
 function resetForm() {
   form.name = '';
@@ -77,17 +116,30 @@ function resetFilters() {
   filters.occupation = '';
 }
 
+async function loadIdentities() {
+  try {
+    const list = await listIdentities();
+    identityNameById.value = new Map(list.map((item) => [item.id, item.name]));
+  } catch {
+    identityNameById.value = new Map();
+  }
+}
+
 async function load() {
   loading.value = true;
   try {
-    rows.value = await listCharacters({
-      q: filters.q.trim() || undefined,
-      storyName: filters.storyName.trim() || undefined,
-      gender: filters.gender.trim() || undefined,
-      ageStage: filters.ageStage.trim() || undefined,
-      race: filters.race.trim() || undefined,
-      occupation: filters.occupation.trim() || undefined,
-    });
+    const [chars] = await Promise.all([
+      listCharacters({
+        q: filters.q.trim() || undefined,
+        storyName: filters.storyName.trim() || undefined,
+        gender: filters.gender.trim() || undefined,
+        ageStage: filters.ageStage.trim() || undefined,
+        race: filters.race.trim() || undefined,
+        occupation: filters.occupation.trim() || undefined,
+      }),
+      loadIdentities(),
+    ]);
+    rows.value = chars;
   } catch {
     ElMessage.error('加载人物失败');
   } finally {
@@ -272,6 +324,75 @@ function unlinkAsset(assetId: number) {
   linkedAssets.value = linkedAssets.value.filter((a) => a.id !== assetId);
 }
 
+function resetFormDialog() {
+  formDialog.identityName = '';
+  formDialog.originalFormLabel = '默认';
+  formDialog.name = '';
+  formDialog.formLabel = '';
+  formDialog.alias = '';
+  formDialog.gender = '';
+  formDialog.ageStage = '';
+  formDialog.race = '';
+  formDialog.occupation = '';
+  formDialog.storyName = '';
+  formDialog.publicIntro = '';
+  formDialog.internalNote = '';
+}
+
+function openAddForm(row: CharacterItem) {
+  if (row.id == null) return;
+  formSource.value = row;
+  resetFormDialog();
+  formDialog.identityName =
+    row.identityId != null
+      ? identityNameById.value.get(row.identityId) ?? ''
+      : row.name ?? '';
+  formDialog.originalFormLabel = row.formLabel?.trim() || '默认';
+  formDialog.storyName = row.storyName ?? '';
+  formDialogVisible.value = true;
+}
+
+async function submitAddForm() {
+  const source = formSource.value;
+  if (source?.id == null) return;
+  if (!formHasIdentity.value && !formDialog.identityName.trim()) {
+    ElMessage.warning('请填写本体名称');
+    return;
+  }
+  if (!formDialog.name.trim()) {
+    ElMessage.warning('请填写新形态姓名');
+    return;
+  }
+  formSaving.value = true;
+  try {
+    const detail = await addCharacterForm(source.id, {
+      identityName: formHasIdentity.value
+        ? null
+        : formDialog.identityName.trim() || null,
+      originalFormLabel: formDialog.originalFormLabel.trim() || null,
+      newCharacter: {
+        name: formDialog.name.trim(),
+        formLabel: formDialog.formLabel.trim() || null,
+        alias: formDialog.alias.trim() || null,
+        gender: formDialog.gender.trim() || null,
+        ageStage: formDialog.ageStage.trim() || null,
+        race: formDialog.race.trim() || null,
+        occupation: formDialog.occupation.trim() || null,
+        storyName: formDialog.storyName.trim() || null,
+        publicIntro: formDialog.publicIntro.trim() || null,
+        internalNote: formDialog.internalNote.trim() || null,
+      },
+    });
+    ElMessage.success('已添加形态');
+    formDialogVisible.value = false;
+    await router.push(`/character-identities/${detail.id}`);
+  } catch (e: unknown) {
+    ElMessage.error(apiError(e, '添加形态失败'));
+  } finally {
+    formSaving.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -326,10 +447,24 @@ onMounted(load);
       <el-table-column prop="ageStage" label="年龄/阶段" width="100" />
       <el-table-column prop="race" label="种族" width="90" />
       <el-table-column prop="occupation" label="身份/职业" min-width="110" show-overflow-tooltip />
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="所属本体" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <router-link
+            v-if="row.identityId != null"
+            class="identity-link"
+            :to="`/character-identities/${row.identityId}`"
+          >
+            {{ formatIdentityCell(row) }}
+          </router-link>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openPreview(row)">预览</el-button>
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button link type="primary" @click="openAddForm(row)">
+            {{ row.identityId != null ? '再添加形态' : '添加形态' }}
+          </el-button>
           <el-button link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -458,6 +593,61 @@ onMounted(load);
         </div>
       </div>
     </el-dialog>
+
+    <el-dialog
+      v-model="formDialogVisible"
+      :title="formHasIdentity ? '再添加形态' : '添加形态'"
+      width="640px"
+      destroy-on-close
+    >
+      <p v-if="formSource" class="hint form-source">
+        原人物：{{ formSource.name }}
+        <span v-if="formSource.code">({{ formSource.code }})</span>
+      </p>
+      <el-form label-width="120px">
+        <el-form-item v-if="!formHasIdentity" label="本体名称" required>
+          <el-input v-model="formDialog.identityName" placeholder="新建本体时使用的名称" />
+        </el-form-item>
+        <el-form-item v-if="!formHasIdentity" label="原形态标签">
+          <el-input v-model="formDialog.originalFormLabel" placeholder="默认「默认」" />
+        </el-form-item>
+        <el-divider content-position="left">新形态人物</el-divider>
+        <el-form-item label="姓名" required>
+          <el-input v-model="formDialog.name" placeholder="新形态姓名" />
+        </el-form-item>
+        <el-form-item label="形态标签">
+          <el-input v-model="formDialog.formLabel" placeholder="如 怪盗" />
+        </el-form-item>
+        <el-form-item label="别名">
+          <el-input v-model="formDialog.alias" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="所属故事">
+          <el-input v-model="formDialog.storyName" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="性别">
+          <el-input v-model="formDialog.gender" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="年龄/阶段">
+          <el-input v-model="formDialog.ageStage" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="种族">
+          <el-input v-model="formDialog.race" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="身份/职业">
+          <el-input v-model="formDialog.occupation" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="公开简介">
+          <el-input v-model="formDialog.publicIntro" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="内部说明">
+          <el-input v-model="formDialog.internalNote" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="formDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="formSaving" @click="submitAddForm">确定</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -561,5 +751,15 @@ onMounted(load);
 .preview-nav {
   display: flex;
   gap: 10px;
+}
+.identity-link {
+  color: #3a6ff0;
+  text-decoration: none;
+}
+.identity-link:hover {
+  text-decoration: underline;
+}
+.form-source {
+  margin: 0 0 12px;
 }
 </style>
