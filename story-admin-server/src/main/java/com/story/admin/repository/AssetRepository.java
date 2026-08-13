@@ -26,10 +26,22 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
              or lower(a.displayName) like lower(concat('%', :q, '%'))
              or lower(coalesce(a.originalFilename, '')) like lower(concat('%', :q, '%'))
              or lower(coalesce(a.description, '')) like lower(concat('%', :q, '%')))
+        and (
+             (:characterId is not null
+               and exists (
+                 select 1 from AssetCharacterRel r
+                 where r.assetId = a.id and r.characterId = :characterId))
+             or (:characterId is null and :characterFilter = 'unlinked'
+               and not exists (
+                 select 1 from AssetCharacterRel r where r.assetId = a.id))
+             or (:characterId is null and :characterFilter = 'all')
+            )
       order by a.sortOrder asc, a.id asc
       """)
   List<Asset> search(
       @Param("categoryId") Long categoryId,
       @Param("status") AssetStatus status,
-      @Param("q") String q);
+      @Param("q") String q,
+      @Param("characterFilter") String characterFilter,
+      @Param("characterId") Long characterId);
 }

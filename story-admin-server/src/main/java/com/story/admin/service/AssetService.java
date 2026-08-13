@@ -114,10 +114,12 @@ public class AssetService {
     }
   }
 
-  public List<Asset> list(Long categoryId, String status, String q) {
+  public List<Asset> list(
+      Long categoryId, String status, String q, String characterFilter, Long characterId) {
     AssetStatus parsed = parseStatus(status);
     String query = q == null ? "" : q.trim();
-    return assetRepository.search(categoryId, parsed, query).stream()
+    String filter = normalizeCharacterFilter(characterFilter, characterId);
+    return assetRepository.search(categoryId, parsed, query, filter, characterId).stream()
         .map(this::hydrate)
         .toList();
   }
@@ -337,6 +339,17 @@ public class AssetService {
     } catch (IllegalArgumentException ex) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid status: " + status);
     }
+  }
+
+  /** characterId wins; otherwise unlinked|all (unrecognized → all). */
+  private static String normalizeCharacterFilter(String characterFilter, Long characterId) {
+    if (characterId != null) {
+      return "all";
+    }
+    if (characterFilter != null && "unlinked".equalsIgnoreCase(characterFilter.trim())) {
+      return "unlinked";
+    }
+    return "all";
   }
 
   private static String displayNameFrom(String originalFilename) {

@@ -57,8 +57,10 @@ public class AssetController {
   public List<Asset> list(
       @RequestParam(required = false) Long categoryId,
       @RequestParam(required = false, defaultValue = "NORMAL") String status,
-      @RequestParam(required = false) String q) {
-    return assetService.list(categoryId, status, q);
+      @RequestParam(required = false) String q,
+      @RequestParam(required = false) String characterFilter,
+      @RequestParam(required = false) Long characterId) {
+    return assetService.list(categoryId, status, q, characterFilter, characterId);
   }
 
   @GetMapping("/{id}")
