@@ -2,9 +2,10 @@
 .vscode/
 storage/**
 !storage/.gitkeep
-**/application-local.yml
 **/target/
 **/node_modules/
 **/dist/
 *.log
 .DS_Store
+tLog/
+.superpowers/
