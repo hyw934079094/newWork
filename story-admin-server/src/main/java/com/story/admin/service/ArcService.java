@@ -4,11 +4,14 @@ import com.story.admin.domain.ArcStatus;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.StoryArc;
+import com.story.admin.domain.StoryPage;
 import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.ArcQuery;
 import com.story.admin.dto.ArcUpdateRequest;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.PageAssetRefRepository;
 import com.story.admin.repository.StoryArcRepository;
+import com.story.admin.repository.StoryPageRepository;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,12 +29,20 @@ public class ArcService {
   private final StoryArcRepository repo;
   private final SeriesService seriesService;
   private final AssetRepository assetRepository;
+  private final StoryPageRepository pageRepository;
+  private final PageAssetRefRepository pageAssetRefRepository;
 
   public ArcService(
-      StoryArcRepository repo, SeriesService seriesService, AssetRepository assetRepository) {
+      StoryArcRepository repo,
+      SeriesService seriesService,
+      AssetRepository assetRepository,
+      StoryPageRepository pageRepository,
+      PageAssetRefRepository pageAssetRefRepository) {
     this.repo = repo;
     this.seriesService = seriesService;
     this.assetRepository = assetRepository;
+    this.pageRepository = pageRepository;
+    this.pageAssetRefRepository = pageAssetRefRepository;
   }
 
   public List<StoryArc> listBySeries(Long seriesId, ArcQuery query) {
@@ -76,6 +87,13 @@ public class ArcService {
     if (!repo.existsById(id)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "arc not found: " + id);
     }
+    List<StoryPage> pages = pageRepository.findByArcId(id);
+    for (StoryPage page : pages) {
+      pageAssetRefRepository.deleteByPageId(page.getId());
+    }
+    pageAssetRefRepository.flush();
+    pageRepository.deleteAll(pages);
+    pageRepository.flush();
     repo.deleteById(id);
   }
 
