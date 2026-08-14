@@ -7,6 +7,8 @@ import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
 import com.story.admin.domain.CharacterProfile;
+import com.story.admin.domain.StoryArc;
+import com.story.admin.domain.StoryPage;
 import com.story.admin.domain.StorySeries;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.exception.ConflictException;
@@ -19,6 +21,9 @@ import com.story.admin.repository.AssetTagRelRepository;
 import com.story.admin.repository.AssetTagRepository;
 import com.story.admin.repository.CharacterProfileRepository;
 import com.story.admin.repository.IdentityAssetRelRepository;
+import com.story.admin.repository.PageAssetRefRepository;
+import com.story.admin.repository.StoryArcRepository;
+import com.story.admin.repository.StoryPageRepository;
 import com.story.admin.repository.StorySeriesRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
@@ -53,6 +58,9 @@ public class AssetService {
   private final AssetComboMemberRepository comboMemberRepository;
   private final IdentityAssetRelRepository identityAssetRelRepository;
   private final StorySeriesRepository storySeriesRepository;
+  private final StoryArcRepository storyArcRepository;
+  private final PageAssetRefRepository pageAssetRefRepository;
+  private final StoryPageRepository storyPageRepository;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -65,7 +73,10 @@ public class AssetService {
       AiReferenceItemRepository aiReferenceItemRepository,
       AssetComboMemberRepository comboMemberRepository,
       IdentityAssetRelRepository identityAssetRelRepository,
-      StorySeriesRepository storySeriesRepository) {
+      StorySeriesRepository storySeriesRepository,
+      StoryArcRepository storyArcRepository,
+      PageAssetRefRepository pageAssetRefRepository,
+      StoryPageRepository storyPageRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -77,6 +88,9 @@ public class AssetService {
     this.comboMemberRepository = comboMemberRepository;
     this.identityAssetRelRepository = identityAssetRelRepository;
     this.storySeriesRepository = storySeriesRepository;
+    this.storyArcRepository = storyArcRepository;
+    this.pageAssetRefRepository = pageAssetRefRepository;
+    this.storyPageRepository = storyPageRepository;
   }
 
   @Transactional
@@ -209,13 +223,20 @@ public class AssetService {
     List<String> comboNames = comboMemberRepository.findComboNamesByAssetId(id);
     List<String> identityNames = identityAssetRelRepository.findIdentityNamesByAssetId(id);
     List<StorySeries> seriesCovers = storySeriesRepository.findByCoverAssetId(id);
+    List<StoryArc> arcCovers = storyArcRepository.findByCoverAssetId(id);
+    List<Long> pageIds = pageAssetRefRepository.findPageIdsByAssetId(id);
+    List<StoryPage> pageRefs =
+        pageIds.isEmpty() ? List.of() : storyPageRepository.findAllById(pageIds);
     if (!characterIds.isEmpty()
         || !aiRefs.isEmpty()
         || !comboNames.isEmpty()
         || !identityNames.isEmpty()
-        || !seriesCovers.isEmpty()) {
+        || !seriesCovers.isEmpty()
+        || !arcCovers.isEmpty()
+        || !pageIds.isEmpty()) {
       throw new ConflictException(
-          buildReferenceSummary(characterIds, aiRefs, comboNames, identityNames, seriesCovers));
+          buildReferenceSummary(
+              characterIds, aiRefs, comboNames, identityNames, seriesCovers, arcCovers, pageRefs));
     }
     tagRelRepository.deleteByAssetId(id);
     characterRelRepository.deleteByAssetId(id);
@@ -403,7 +424,9 @@ public class AssetService {
       List<AiReferenceItem> aiRefs,
       List<String> comboNames,
       List<String> identityNames,
-      List<StorySeries> seriesCovers) {
+      List<StorySeries> seriesCovers,
+      List<StoryArc> arcCovers,
+      List<StoryPage> pageRefs) {
     StringBuilder sb = new StringBuilder("无法彻底删除：仍存在引用。");
     if (!characterIds.isEmpty()) {
       Map<Long, CharacterProfile> byId =
@@ -447,6 +470,20 @@ public class AssetService {
               .map(s -> s.getName() + "(" + s.getCode() + ")")
               .collect(Collectors.joining(", "));
       sb.append(" 系列封面: [").append(items).append("].");
+    }
+    if (!arcCovers.isEmpty()) {
+      String items =
+          arcCovers.stream()
+              .map(a -> a.getTitle() + "(" + a.getCode() + ")")
+              .collect(Collectors.joining(", "));
+      sb.append(" 篇章封面: [").append(items).append("].");
+    }
+    if (!pageRefs.isEmpty()) {
+      String items =
+          pageRefs.stream()
+              .map(p -> p.getTitle() + "(id=" + p.getId() + ")")
+              .collect(Collectors.joining(", "));
+      sb.append(" 页面画面组: [").append(items).append("].");
     }
     return sb.toString();
   }
