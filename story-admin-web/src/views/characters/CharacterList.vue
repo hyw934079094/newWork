@@ -28,8 +28,11 @@ const saving = ref(false);
 const assetLoading = ref(false);
 const uploading = ref(false);
 const linkedAssets = ref<AssetItem[]>([]);
+/** Non-portrait linked assets kept on save so expression/costume links are not wiped. */
+const otherLinkedAssetIds = ref<number[]>([]);
 const selectedLibraryIds = ref<number[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
+const portraitCategoryId = ref<number | null>(null);
 
 const pickerVisible = ref(false);
 const pickerCategoryId = ref<number | 'all'>('all');
@@ -118,6 +121,7 @@ function resetForm() {
   form.publicIntro = '';
   form.internalNote = '';
   linkedAssets.value = [];
+  otherLinkedAssetIds.value = [];
   selectedLibraryIds.value = [];
 }
 
@@ -161,13 +165,36 @@ async function load() {
   }
 }
 
+async function ensureCategories() {
+  if (!categories.value.length) {
+    categories.value = await listCategories();
+  }
+  portraitCategoryId.value =
+    categories.value.find((c) => c.code === 'portrait')?.id ?? null;
+}
+
+function splitPortraitAssets(all: AssetItem[]): { portraits: AssetItem[]; otherIds: number[] } {
+  const pid = portraitCategoryId.value;
+  if (pid == null) {
+    return { portraits: all, otherIds: [] };
+  }
+  return {
+    portraits: all.filter((a) => a.categoryId === pid),
+    otherIds: all.filter((a) => a.categoryId !== pid).map((a) => a.id),
+  };
+}
+
 async function loadLinkedAssets(characterId: number) {
   assetLoading.value = true;
   try {
-    linkedAssets.value = await listCharacterAssets(characterId);
-    selectedLibraryIds.value = linkedAssets.value.map((a) => a.id);
+    await ensureCategories();
+    const all = await listCharacterAssets(characterId);
+    const { portraits, otherIds } = splitPortraitAssets(all);
+    linkedAssets.value = portraits;
+    otherLinkedAssetIds.value = otherIds;
+    selectedLibraryIds.value = portraits.map((a) => a.id);
   } catch {
-    ElMessage.error('加载人物素材失败');
+    ElMessage.error('加载人物立绘失败');
   } finally {
     assetLoading.value = false;
   }
@@ -175,12 +202,10 @@ async function loadLinkedAssets(characterId: number) {
 
 async function openAssetPicker() {
   pickerSelectedIds.value = [...selectedLibraryIds.value];
-  pickerCategoryId.value = 'all';
+  await ensureCategories();
+  pickerCategoryId.value = portraitCategoryId.value ?? 'all';
   pickerKeyword.value = '';
   pickerVisible.value = true;
-  if (!categories.value.length) {
-    categories.value = await listCategories();
-  }
   await loadPickerAssets();
 }
 
@@ -211,8 +236,29 @@ function isPickerSelected(id: number): boolean {
 }
 
 function confirmAssetPicker() {
-  selectedLibraryIds.value = [...pickerSelectedIds.value];
+  const pid = portraitCategoryId.value;
+  const byId = new Map<number, AssetItem>();
+  for (const a of linkedAssets.value) byId.set(a.id, a);
+  for (const a of pickerAssets.value) byId.set(a.id, a);
+
+  const nextIds: number[] = [];
+  for (const id of pickerSelectedIds.value) {
+    const item = byId.get(id);
+    if (!item) {
+      if (selectedLibraryIds.value.includes(id)) nextIds.push(id);
+      continue;
+    }
+    if (pid == null || item.categoryId === pid) nextIds.push(id);
+  }
+  const skipped = pickerSelectedIds.value.length - nextIds.length;
+  selectedLibraryIds.value = nextIds;
+  linkedAssets.value = nextIds
+    .map((id) => byId.get(id))
+    .filter((a): a is AssetItem => a != null);
   pickerVisible.value = false;
+  if (skipped > 0) {
+    ElMessage.warning(`已忽略 ${skipped} 项非「人物立绘」素材`);
+  }
 }
 
 function openCreate() {
@@ -272,7 +318,7 @@ async function submit() {
       const created = await createCharacter(payload());
       editing.value = true;
       editingId.value = created.id ?? null;
-      ElMessage.success('人物已创建，可继续指定或上传预览图');
+      ElMessage.success('人物已创建，可继续指定或上传立绘');
       if (created.id != null) {
         await loadLinkedAssets(created.id);
       }
@@ -311,17 +357,19 @@ function onMoreCommand(command: string, row: CharacterItem) {
 async function openPreview(row: CharacterItem) {
   if (row.id == null) return;
   try {
-    const assets = await listCharacterAssets(row.id);
-    if (!assets.length) {
-      ElMessage.info('该人物暂无预览图，请先编辑并上传或指定素材');
+    await ensureCategories();
+    const all = await listCharacterAssets(row.id);
+    const { portraits } = splitPortraitAssets(all);
+    if (!portraits.length) {
+      ElMessage.info('该人物暂无立绘，请先编辑并上传或指定「人物立绘」分类素材');
       return;
     }
     previewTitle.value = row.name;
-    previewAssets.value = assets;
+    previewAssets.value = portraits;
     previewIndex.value = 0;
     previewVisible.value = true;
   } catch {
-    ElMessage.error('加载预览失败');
+    ElMessage.error('加载立绘预览失败');
   }
 }
 
@@ -338,7 +386,7 @@ function previewPrev() {
 
 function triggerUpload() {
   if (!canManageAssets.value) {
-    ElMessage.warning('请先保存人物，再上传预览图');
+    ElMessage.warning('请先保存人物，再上传立绘');
     return;
   }
   fileInput.value?.click();
@@ -351,9 +399,9 @@ async function onFilesPicked(ev: Event) {
   if (!files.length || editingId.value == null) return;
   uploading.value = true;
   try {
-    linkedAssets.value = await uploadCharacterAssets(editingId.value, files);
-    selectedLibraryIds.value = linkedAssets.value.map((a) => a.id);
-    ElMessage.success(`已上传并关联 ${files.length} 张预览图`);
+    await uploadCharacterAssets(editingId.value, files);
+    await loadLinkedAssets(editingId.value);
+    ElMessage.success(`已上传并关联 ${files.length} 张立绘`);
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '上传失败');
   } finally {
@@ -365,10 +413,14 @@ async function saveLinkedAssets() {
   if (editingId.value == null) return;
   assetLoading.value = true;
   try {
-    linkedAssets.value = await replaceCharacterAssets(editingId.value, selectedLibraryIds.value);
-    ElMessage.success('已更新人物素材关联');
+    const merged = Array.from(
+      new Set([...otherLinkedAssetIds.value, ...selectedLibraryIds.value]),
+    );
+    await replaceCharacterAssets(editingId.value, merged);
+    await loadLinkedAssets(editingId.value);
+    ElMessage.success('已更新人物立绘关联');
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '保存素材关联失败');
+    ElMessage.error(e?.response?.data?.message || '保存立绘关联失败');
   } finally {
     assetLoading.value = false;
   }
@@ -625,7 +677,7 @@ onMounted(load);
 
       <div class="asset-panel">
         <div class="asset-panel-head">
-          <strong class="asset-panel-title">人物预览素材</strong>
+          <strong class="asset-panel-title">人物立绘</strong>
           <div class="asset-panel-actions">
             <input
               ref="fileInput"
@@ -636,7 +688,7 @@ onMounted(load);
               @change="onFilesPicked"
             />
             <el-button :disabled="!canManageAssets" :loading="uploading" @click="triggerUpload">
-              上传预览图
+              上传立绘
             </el-button>
             <el-button :disabled="!canManageAssets" @click="openAssetPicker">
               从素材库指定
@@ -648,12 +700,13 @@ onMounted(load);
               :loading="assetLoading"
               @click="saveLinkedAssets"
             >
-              保存关联
+              保存立绘关联
             </el-button>
           </div>
         </div>
-        <p v-if="!canManageAssets" class="hint">先点击下方「保存」创建人物后，即可上传或指定素材。</p>
+        <p v-if="!canManageAssets" class="hint">先点击下方「保存」创建人物后，即可上传或指定立绘。</p>
         <template v-else>
+          <p class="hint">仅展示「人物立绘」分类素材；表情/服装等其它关联不会在此显示，保存时会保留。</p>
           <div v-loading="assetLoading" class="linked-thumbs">
             <div v-for="asset in linkedAssets" :key="asset.id" class="thumb-card">
               <img :src="assetContentUrl(asset.id)" :alt="asset.displayName" />
@@ -662,10 +715,10 @@ onMounted(load);
                 <el-button link type="danger" @click="unlinkAsset(asset.id)">移除</el-button>
               </div>
             </div>
-            <p v-if="!linkedAssets.length" class="hint">暂无关联素材</p>
+            <p v-if="!linkedAssets.length" class="hint">暂无关联立绘</p>
           </div>
           <p v-if="selectedLibraryIds.length" class="hint pending-hint">
-            待保存关联 {{ selectedLibraryIds.length }} 项（确定挑选后请点「保存关联」）
+            待保存立绘关联 {{ selectedLibraryIds.length }} 项（确定挑选后请点「保存立绘关联」）
           </p>
         </template>
       </div>
@@ -673,14 +726,14 @@ onMounted(load);
       <template #footer>
         <el-button @click="dialogVisible = false">关闭</el-button>
         <el-button type="primary" :loading="saving" @click="submit">
-          {{ editing ? '保存资料' : '保存并继续指定素材' }}
+          {{ editing ? '保存资料' : '保存并继续指定立绘' }}
         </el-button>
       </template>
     </el-dialog>
 
     <el-dialog
       v-model="pickerVisible"
-      title="从素材库指定"
+      title="指定人物立绘"
       width="760px"
       append-to-body
       destroy-on-close
