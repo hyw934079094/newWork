@@ -192,11 +192,11 @@ git commit -m "feat: series cover single-select asset picker"
 - `README.md` 链接一句
 - 本计划验收表
 
-- [ ] **Step 1:** `mvn -q -Dtest=SeriesServiceTest,AssetHardDeleteSeriesCoverTest test`（或实际测试类名）PASS
+- [x] **Step 1:** `mvn -q -Dtest=SeriesServiceTest,AssetHardDeleteSeriesCoverTest test`（或实际测试类名）PASS
 
-- [ ] **Step 2:** `npm run build`；浏览器 PARTIAL OK
+- [x] **Step 2:** `npm run build`；浏览器 PARTIAL OK
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "docs: record story series acceptance"
@@ -219,3 +219,22 @@ git commit -m "docs: record story series acceptance"
 - 实现后需重启后端跑 Flyway V6
 - 勿提交无关 `storage/` / `pic/`
 - 单选弹窗可内联在 `SeriesList.vue`，不必抽通用组件（YAGNI）
+
+---
+
+## Task 5 验收表（Spec §7）
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | 可创建/编辑/删除系列；状态四态可选；标签与简介可空可存 | **PASS** | SeriesServiceTest；`/api/series` + SeriesList UI（Task 1/3） |
+| 2 | 可从素材库单选封面并预览；可清除封面；硬删该封面素材 → 409 | **PASS** (UI browser **PARTIAL**) | AssetHardDeleteSeriesCoverTest；封面弹窗 Task 4；浏览器点验未跑 |
+| 3 | 列表可按关键字/状态筛选；侧栏可进入 `/series` | **PASS** (UI browser **PARTIAL**) | SeriesServiceTest list q；路由/侧栏 Task 3；build PASS |
+| 4 | 不改动现有人物/素材归属行为 | **PASS** | 首期未强制挂系列；仅硬删增加封面引用检查 |
+
+| Extra | Result | Evidence |
+|-------|--------|----------|
+| Backend re-test (Task 5) | **PASS** | mvn `-Dtest=SeriesServiceTest,AssetHardDeleteSeriesCoverTest` EXIT=0（JDK 24.0.1） |
+| Frontend build | **PASS** | story-admin-web `npm run build` |
+| UI browser | **PARTIAL OK** | 按 brief 可接受 |
+
+**Tasks 1–5 steps:** Task 5 全部勾选完成。
