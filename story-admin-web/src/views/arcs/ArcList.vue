@@ -1,29 +1,31 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import {
-  createSeries,
-  deleteSeries,
-  listSeries,
-  updateSeries,
-  type SeriesItem,
-  type SeriesStatus,
-} from '../../api/series';
+  createArc,
+  deleteArc,
+  listArcs,
+  updateArc,
+  type ArcItem,
+  type ArcStatus,
+} from '../../api/arc';
+import { getSeries } from '../../api/series';
 
-const router = useRouter();
-
-const STATUS_OPTIONS: { value: SeriesStatus; label: string }[] = [
+const STATUS_OPTIONS: { value: ArcStatus; label: string }[] = [
   { value: 'DRAFT', label: '草稿' },
-  { value: 'SERIALIZING', label: '连载中' },
-  { value: 'COMPLETED', label: '已完结' },
-  { value: 'PUBLISHED', label: '已发布' },
+  { value: 'WRITING', label: '撰写中' },
+  { value: 'FINALIZED', label: '已定稿' },
 ];
 
+const route = useRoute();
+const router = useRouter();
+const seriesId = computed(() => Number(route.params.seriesId));
+const seriesName = ref('');
 const loading = ref(false);
-const rows = ref<SeriesItem[]>([]);
+const rows = ref<ArcItem[]>([]);
 const dialogVisible = ref(false);
 const editing = ref(false);
 const editingId = ref<number | null>(null);
@@ -39,30 +41,33 @@ const categories = ref<AssetCategoryItem[]>([]);
 
 const filters = reactive({
   q: '',
-  status: '' as '' | SeriesStatus,
+  status: '' as '' | ArcStatus,
 });
 
 const form = reactive({
-  name: '',
-  status: 'DRAFT' as SeriesStatus,
+  title: '',
+  status: 'DRAFT' as ArcStatus,
   summary: '',
-  tags: '',
   coverAssetId: null as number | null,
 });
 
 const statusLabel = computed(() => {
   const map = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label])) as Record<
-    SeriesStatus,
+    ArcStatus,
     string
   >;
-  return (status: SeriesStatus) => map[status] ?? status;
+  return (status: ArcStatus) => map[status] ?? status;
 });
 
+function apiError(e: unknown, fallback: string): string {
+  const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return msg?.trim() || fallback;
+}
+
 function resetForm() {
-  form.name = '';
+  form.title = '';
   form.status = 'DRAFT';
   form.summary = '';
-  form.tags = '';
   form.coverAssetId = null;
 }
 
@@ -71,15 +76,35 @@ function resetFilters() {
   filters.status = '';
 }
 
+async function loadSeries() {
+  const id = seriesId.value;
+  if (!Number.isFinite(id) || id <= 0) {
+    seriesName.value = '';
+    return;
+  }
+  try {
+    const series = await getSeries(id);
+    seriesName.value = series.name ?? '';
+  } catch {
+    seriesName.value = '';
+    ElMessage.error('加载系列失败');
+  }
+}
+
 async function load() {
+  const id = seriesId.value;
+  if (!Number.isFinite(id) || id <= 0) {
+    rows.value = [];
+    return;
+  }
   loading.value = true;
   try {
-    rows.value = await listSeries({
+    const list = await listArcs(id, {
       q: filters.q.trim() || undefined,
-      status: filters.status || undefined,
     });
-  } catch {
-    ElMessage.error('加载系列失败');
+    rows.value = filters.status ? list.filter((row) => row.status === filters.status) : list;
+  } catch (e: unknown) {
+    ElMessage.error(apiError(e, '加载篇章失败'));
   } finally {
     loading.value = false;
   }
@@ -92,13 +117,12 @@ function openCreate() {
   dialogVisible.value = true;
 }
 
-function openEdit(row: SeriesItem) {
+function openEdit(row: ArcItem) {
   editing.value = true;
   editingId.value = row.id ?? null;
-  form.name = row.name ?? '';
+  form.title = row.title ?? '';
   form.status = row.status ?? 'DRAFT';
   form.summary = row.summary ?? '';
-  form.tags = row.tags ?? '';
   form.coverAssetId = row.coverAssetId ?? null;
   dialogVisible.value = true;
 }
@@ -146,57 +170,50 @@ function confirmCoverPicker() {
 
 function payload() {
   return {
-    name: form.name.trim(),
+    title: form.title.trim(),
     status: form.status,
     summary: form.summary.trim() || null,
-    tags: form.tags.trim() || null,
     coverAssetId: form.coverAssetId,
   };
 }
 
 async function submit() {
-  if (!form.name.trim()) {
-    ElMessage.warning('请填写系列名称');
+  if (!form.title.trim()) {
+    ElMessage.warning('请填写篇章标题');
+    return;
+  }
+  const id = seriesId.value;
+  if (!Number.isFinite(id) || id <= 0) {
+    ElMessage.error('系列无效');
     return;
   }
   saving.value = true;
   try {
     if (editing.value && editingId.value != null) {
-      await updateSeries(editingId.value, payload());
+      await updateArc(editingId.value, payload());
       ElMessage.success('已更新');
     } else {
-      await createSeries(payload());
+      await createArc(id, payload());
       ElMessage.success('已创建');
     }
     dialogVisible.value = false;
     await load();
   } catch (e: unknown) {
-    const msg =
-      (e as { response?: { data?: { message?: string } } })?.response?.data?.message || '保存失败';
-    ElMessage.error(msg);
+    ElMessage.error(apiError(e, '保存失败'));
   } finally {
     saving.value = false;
   }
 }
 
-function apiError(e: unknown, fallback: string): string {
-  const err = e as { response?: { status?: number; data?: { message?: string } } };
-  const msg = err?.response?.data?.message?.trim();
-  if (msg) return msg;
-  if (err?.response?.status === 409) return '该系列下仍有篇章，无法删除';
-  return fallback;
-}
-
-function goArcs(row: SeriesItem) {
-  if (row.id == null) return;
-  void router.push(`/series/${row.id}/arcs`);
-}
-
-async function remove(row: SeriesItem) {
+async function remove(row: ArcItem) {
   if (row.id == null) return;
   try {
-    await ElMessageBox.confirm(`确认删除系列「${row.name}」？`, '删除确认', { type: 'warning' });
-    await deleteSeries(row.id);
+    await ElMessageBox.confirm(
+      `确认删除篇章「${row.title}」？将级联删除其下所有页面。`,
+      '删除确认',
+      { type: 'warning' },
+    );
+    await deleteArc(row.id);
     ElMessage.success('已删除');
     await load();
   } catch (e: unknown) {
@@ -205,17 +222,37 @@ async function remove(row: SeriesItem) {
   }
 }
 
-onMounted(load);
+function goPages(row: ArcItem) {
+  if (row.id == null) return;
+  void router.push(`/arcs/${row.id}/pages`);
+}
+
+function goSeries() {
+  void router.push('/series');
+}
+
+watch(seriesId, async () => {
+  await loadSeries();
+  await load();
+});
+
+onMounted(async () => {
+  await loadSeries();
+  await load();
+});
 </script>
 
 <template>
-  <section class="series-page">
+  <section class="arc-page">
     <div class="header">
       <div>
-        <p class="eyebrow">SERIES</p>
-        <h2>故事系列</h2>
+        <p class="eyebrow">ARCS</p>
+        <h2>{{ seriesName ? `${seriesName} · 篇章` : '篇章' }}</h2>
       </div>
-      <el-button type="primary" @click="openCreate">新增系列</el-button>
+      <div class="header-actions">
+        <el-button @click="goSeries">返回系列</el-button>
+        <el-button type="primary" @click="openCreate">新增篇章</el-button>
+      </div>
     </div>
 
     <el-form class="filters" :inline="true" @submit.prevent="load">
@@ -223,7 +260,7 @@ onMounted(load);
         <el-input
           v-model="filters.q"
           clearable
-          placeholder="名称 / 编号 / 标签"
+          placeholder="标题 / 编号"
           class="filter-control filter-control--wide"
         />
       </el-form-item>
@@ -255,30 +292,30 @@ onMounted(load);
       </el-form-item>
     </el-form>
 
-    <el-table v-loading="loading" :data="rows" stripe empty-text="暂无系列">
+    <el-table v-loading="loading" :data="rows" stripe empty-text="暂无篇章">
       <el-table-column label="封面" width="88">
         <template #default="{ row }">
           <img
             v-if="row.coverAssetId != null"
             class="cover-thumb"
             :src="assetContentUrl(row.coverAssetId)"
-            :alt="row.name"
+            :alt="row.title"
           />
           <span v-else class="cover-placeholder">无</span>
         </template>
       </el-table-column>
       <el-table-column prop="code" label="编号" width="100" />
-      <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="title" label="标题" min-width="140" show-overflow-tooltip />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           {{ statusLabel(row.status) }}
         </template>
       </el-table-column>
-      <el-table-column prop="tags" label="标签" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="summary" label="简介" min-width="180" show-overflow-tooltip />
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <div class="row-actions">
-            <el-button link type="primary" @click="goArcs(row)">篇章</el-button>
+            <el-button link type="primary" @click="goPages(row)">页面</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </div>
@@ -288,14 +325,14 @@ onMounted(load);
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editing ? '编辑系列' : '新增系列'"
+      :title="editing ? '编辑篇章' : '新增篇章'"
       width="780px"
       destroy-on-close
-      class="series-edit-dialog"
+      class="arc-edit-dialog"
     >
       <el-form label-width="88px" class="edit-form">
-        <el-form-item label="名称" required>
-          <el-input v-model="form.name" placeholder="如 暗夜物语" />
+        <el-form-item label="标题" required>
+          <el-input v-model="form.title" placeholder="如 暗夜开篇" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status" class="status-select">
@@ -308,10 +345,7 @@ onMounted(load);
           </el-select>
         </el-form-item>
         <el-form-item label="简介">
-          <el-input v-model="form.summary" type="textarea" :rows="3" placeholder="公开简介，可选" />
-        </el-form-item>
-        <el-form-item label="标签">
-          <el-input v-model="form.tags" placeholder="逗号分隔，如 奇幻,连载" />
+          <el-input v-model="form.summary" type="textarea" :rows="3" placeholder="篇章简介，可选" />
         </el-form-item>
         <el-form-item label="封面">
           <div class="cover-editor">
@@ -404,7 +438,7 @@ onMounted(load);
 </template>
 
 <style scoped>
-.series-page {
+.arc-page {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -414,6 +448,10 @@ onMounted(load);
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+}
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 .eyebrow {
   margin: 0;

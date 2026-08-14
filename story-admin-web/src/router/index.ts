@@ -11,6 +11,8 @@ import ComboEditor from '../views/combos/ComboEditor.vue';
 import AiReference from '../views/ai/AiReference.vue';
 import RecycleBin from '../views/recycle/RecycleBin.vue';
 import SeriesList from '../views/series/SeriesList.vue';
+import ArcList from '../views/arcs/ArcList.vue';
+import PageList from '../views/pages/PageList.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,6 +24,8 @@ const router = createRouter({
     { path: '/assets/combos/:id', name: 'asset-combo-edit', component: ComboEditor },
     { path: '/ai-reference', name: 'ai-reference', component: AiReference },
     { path: '/series', name: 'series', component: SeriesList },
+    { path: '/series/:seriesId/arcs', name: 'series-arcs', component: ArcList },
+    { path: '/arcs/:arcId/pages', name: 'arc-pages', component: PageList },
     { path: '/characters', name: 'characters', component: CharacterList },
     { path: '/character-identities', name: 'character-identities', component: IdentityList },
     {
