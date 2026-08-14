@@ -111,6 +111,22 @@ class CharacterServiceTest {
   }
 
   @Test
+  void deleteSucceedsWhenOnlyLinkedDeletedAssets() {
+    Long assetId = persistAsset("ghost-link").getId();
+    CharacterProfile character =
+        characterService.create(
+            new CharacterCreateRequest(
+                "熊猫头测", null, null, null, null, null, null, null, null, null, null, null));
+    assetService.update(
+        assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
+    assetService.recycle(assetId);
+
+    characterService.delete(character.getId());
+
+    assertThat(characterProfileRepository.findById(character.getId())).isEmpty();
+  }
+
+  @Test
   void addFormCreatesIdentityForStandaloneCharacter() {
     CharacterProfile original =
         characterService.create(

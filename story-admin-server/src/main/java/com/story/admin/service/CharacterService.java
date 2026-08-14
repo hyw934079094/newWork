@@ -171,7 +171,15 @@ public class CharacterService {
     }
     List<Long> assetIds = characterRelRepository.findAssetIdsByCharacterId(id);
     if (!assetIds.isEmpty()) {
-      throw new ConflictException(buildLinkedAssetSummary(assetIds));
+      List<Long> normalIds =
+          assetRepository.findAllById(assetIds).stream()
+              .filter(a -> a.getStatus() == AssetStatus.NORMAL)
+              .map(Asset::getId)
+              .toList();
+      if (!normalIds.isEmpty()) {
+        throw new ConflictException(buildLinkedAssetSummary(normalIds));
+      }
+      characterRelRepository.deleteByCharacterId(id);
     }
     repo.deleteById(id);
   }
