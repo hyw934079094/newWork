@@ -15,6 +15,7 @@ import {
   type CharacterItem,
 } from '../../api/character';
 import { listIdentities } from '../../api/characterIdentity';
+import { listCategories, type AssetCategoryItem } from '../../api/category';
 
 const router = useRouter();
 const loading = ref(false);
@@ -27,9 +28,16 @@ const saving = ref(false);
 const assetLoading = ref(false);
 const uploading = ref(false);
 const linkedAssets = ref<AssetItem[]>([]);
-const libraryAssets = ref<AssetItem[]>([]);
 const selectedLibraryIds = ref<number[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
+
+const pickerVisible = ref(false);
+const pickerCategoryId = ref<number | 'all'>('all');
+const pickerKeyword = ref('');
+const pickerAssets = ref<AssetItem[]>([]);
+const pickerSelectedIds = ref<number[]>([]);
+const pickerLoading = ref(false);
+const categories = ref<AssetCategoryItem[]>([]);
 
 const previewVisible = ref(false);
 const previewTitle = ref('');
@@ -165,12 +173,46 @@ async function loadLinkedAssets(characterId: number) {
   }
 }
 
-async function loadLibraryAssets() {
-  try {
-    libraryAssets.value = await listAssets({ status: 'NORMAL' });
-  } catch {
-    libraryAssets.value = [];
+async function openAssetPicker() {
+  pickerSelectedIds.value = [...selectedLibraryIds.value];
+  pickerCategoryId.value = 'all';
+  pickerKeyword.value = '';
+  pickerVisible.value = true;
+  if (!categories.value.length) {
+    categories.value = await listCategories();
   }
+  await loadPickerAssets();
+}
+
+async function loadPickerAssets() {
+  pickerLoading.value = true;
+  try {
+    pickerAssets.value = await listAssets({
+      status: 'NORMAL',
+      categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
+      q: pickerKeyword.value.trim() || undefined,
+    });
+  } finally {
+    pickerLoading.value = false;
+  }
+}
+
+function togglePickerAsset(id: number) {
+  const idx = pickerSelectedIds.value.indexOf(id);
+  if (idx >= 0) {
+    pickerSelectedIds.value = pickerSelectedIds.value.filter((x) => x !== id);
+  } else {
+    pickerSelectedIds.value = [...pickerSelectedIds.value, id];
+  }
+}
+
+function isPickerSelected(id: number): boolean {
+  return pickerSelectedIds.value.includes(id);
+}
+
+function confirmAssetPicker() {
+  selectedLibraryIds.value = [...pickerSelectedIds.value];
+  pickerVisible.value = false;
 }
 
 function openCreate() {
@@ -178,7 +220,6 @@ function openCreate() {
   editingId.value = null;
   resetForm();
   dialogVisible.value = true;
-  void loadLibraryAssets();
 }
 
 async function openEdit(row: CharacterItem) {
@@ -195,10 +236,9 @@ async function openEdit(row: CharacterItem) {
   form.publicIntro = row.publicIntro ?? '';
   form.internalNote = row.internalNote ?? '';
   dialogVisible.value = true;
-  await Promise.all([
-    loadLibraryAssets(),
-    row.id != null ? loadLinkedAssets(row.id) : Promise.resolve(),
-  ]);
+  if (row.id != null) {
+    await loadLinkedAssets(row.id);
+  }
 }
 
 function payload() {
@@ -314,7 +354,6 @@ async function onFilesPicked(ev: Event) {
     linkedAssets.value = await uploadCharacterAssets(editingId.value, files);
     selectedLibraryIds.value = linkedAssets.value.map((a) => a.id);
     ElMessage.success(`已上传并关联 ${files.length} 张预览图`);
-    await loadLibraryAssets();
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '上传失败');
   } finally {
@@ -599,6 +638,9 @@ onMounted(load);
             <el-button :disabled="!canManageAssets" :loading="uploading" @click="triggerUpload">
               上传预览图
             </el-button>
+            <el-button :disabled="!canManageAssets" @click="openAssetPicker">
+              从素材库指定
+            </el-button>
             <el-button
               type="primary"
               plain
@@ -622,25 +664,9 @@ onMounted(load);
             </div>
             <p v-if="!linkedAssets.length" class="hint">暂无关联素材</p>
           </div>
-          <el-form-item label="从素材库指定" label-width="110px" class="library-pick">
-            <el-select
-              v-model="selectedLibraryIds"
-              multiple
-              filterable
-              clearable
-              collapse-tags
-              collapse-tags-tooltip
-              placeholder="选择已有素材"
-              class="library-select"
-            >
-              <el-option
-                v-for="asset in libraryAssets"
-                :key="asset.id"
-                :label="`${asset.displayName} (#${asset.id})`"
-                :value="asset.id"
-              />
-            </el-select>
-          </el-form-item>
+          <p v-if="selectedLibraryIds.length" class="hint pending-hint">
+            待保存关联 {{ selectedLibraryIds.length }} 项（确定挑选后请点「保存关联」）
+          </p>
         </template>
       </div>
 
@@ -649,6 +675,68 @@ onMounted(load);
         <el-button type="primary" :loading="saving" @click="submit">
           {{ editing ? '保存资料' : '保存并继续指定素材' }}
         </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="pickerVisible"
+      title="从素材库指定"
+      width="760px"
+      append-to-body
+      destroy-on-close
+      class="asset-picker-dialog"
+    >
+      <div class="picker-toolbar">
+        <el-select
+          v-model="pickerCategoryId"
+          placeholder="全部分类"
+          class="picker-category"
+          @change="loadPickerAssets"
+        >
+          <el-option label="全部分类" value="all" />
+          <el-option
+            v-for="cat in categories"
+            :key="cat.id"
+            :label="cat.name"
+            :value="cat.id"
+          />
+        </el-select>
+        <el-input
+          v-model="pickerKeyword"
+          clearable
+          placeholder="关键字（显示名）"
+          class="picker-keyword"
+          @clear="loadPickerAssets"
+          @keyup.enter="loadPickerAssets"
+        />
+        <el-button type="primary" :loading="pickerLoading" @click="loadPickerAssets">
+          筛选
+        </el-button>
+      </div>
+
+      <div v-loading="pickerLoading" class="picker-grid">
+        <button
+          v-for="asset in pickerAssets"
+          :key="asset.id"
+          type="button"
+          class="picker-card"
+          :class="{ 'is-selected': isPickerSelected(asset.id) }"
+          @click="togglePickerAsset(asset.id)"
+        >
+          <img :src="assetContentUrl(asset.id)" :alt="asset.displayName" />
+          <span class="picker-card-title" :title="asset.displayName">{{ asset.displayName }}</span>
+        </button>
+        <p v-if="!pickerLoading && !pickerAssets.length" class="hint picker-empty">暂无 NORMAL 素材</p>
+      </div>
+
+      <template #footer>
+        <div class="picker-footer">
+          <span class="picker-count">已选 {{ pickerSelectedIds.length }} 项</span>
+          <div class="picker-footer-actions">
+            <el-button @click="pickerVisible = false">取消</el-button>
+            <el-button type="primary" @click="confirmAssetPicker">确定</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -828,12 +916,15 @@ onMounted(load);
   color: #6f7e9d;
   font-size: 13px;
 }
+.pending-hint {
+  margin-top: 8px;
+}
 .linked-thumbs {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   min-height: 48px;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 .thumb-card {
   width: 104px;
@@ -861,11 +952,85 @@ onMounted(load);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.library-pick {
-  margin-bottom: 0;
+.picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.library-select {
+.picker-category {
+  width: 168px;
+  flex-shrink: 0;
+}
+.picker-keyword {
+  flex: 1;
+  min-width: 160px;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 112px);
+  gap: 12px;
+  min-height: 200px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+}
+.picker-card {
+  width: 112px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px #24325214;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.picker-card:hover {
+  border-color: #a8c0f5;
+}
+.picker-card.is-selected {
+  border-color: #3a6ff0;
+  box-shadow: 0 0 0 1px #3a6ff0, 0 4px 14px #24325218;
+}
+.picker-card img {
+  width: 108px;
+  height: 108px;
+  object-fit: cover;
+  display: block;
+  background: #eef1f7;
+}
+.picker-card-title {
+  display: block;
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-empty {
+  grid-column: 1 / -1;
+  margin: 24px 0;
+  text-align: center;
+}
+.picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
+}
+.picker-count {
+  color: #6f7e9d;
+  font-size: 13px;
+}
+.picker-footer-actions {
+  display: flex;
+  gap: 8px;
 }
 .preview-box {
   display: flex;
