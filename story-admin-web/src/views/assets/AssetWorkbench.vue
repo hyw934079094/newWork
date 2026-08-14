@@ -30,6 +30,7 @@ const saving = ref(false);
 const recycling = ref(false);
 const replacing = ref(false);
 const previewBust = ref(0);
+const lightboxVisible = ref(false);
 const replaceFileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
@@ -393,6 +394,15 @@ function selectAsset(id: number) {
   selectedAssetId.value = id;
 }
 
+function openLightbox() {
+  if (!currentAsset.value) return;
+  lightboxVisible.value = true;
+}
+
+function closeLightbox() {
+  lightboxVisible.value = false;
+}
+
 function goPrev() {
   if (!canPrev.value) return;
   selectedAssetId.value = assets.value[currentIndex.value - 1].id;
@@ -696,10 +706,17 @@ onMounted(async () => {
 
       <section v-loading="loading" class="pane preview">
         <div v-if="currentAsset" class="preview-main">
-          <img
-            :src="assetContentUrl(currentAsset.id, previewBust || undefined)"
-            :alt="currentAsset.displayName"
-          />
+          <button
+            type="button"
+            class="preview-img-btn"
+            title="查看大图"
+            @click="openLightbox"
+          >
+            <img
+              :src="assetContentUrl(currentAsset.id, previewBust || undefined)"
+              :alt="currentAsset.displayName"
+            />
+          </button>
           <div class="preview-meta">
             <strong>{{ currentAsset.displayName }}</strong>
             <span>第 {{ currentIndex + 1 }} / {{ assets.length }} 份</span>
@@ -901,6 +918,23 @@ onMounted(async () => {
     </div>
 
   </section>
+
+  <Teleport to="body">
+    <div
+      v-if="lightboxVisible && currentAsset"
+      class="asset-lightbox"
+      role="dialog"
+      aria-modal="true"
+      @click="closeLightbox"
+    >
+      <img
+        class="asset-lightbox-img"
+        :src="assetContentUrl(currentAsset.id, previewBust || undefined)"
+        :alt="currentAsset.displayName"
+        @click.stop
+      />
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -1049,12 +1083,46 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
 }
+.preview-img-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: 12px;
+}
+.preview-img-btn:focus-visible {
+  outline: 2px solid #2f6fed;
+  outline-offset: 2px;
+}
 .preview-main img {
   max-width: 100%;
   max-height: 360px;
   object-fit: contain;
   background: #f4f6fa;
   border-radius: 12px;
+  display: block;
+}
+.asset-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(12, 18, 32, 0.72);
+  cursor: zoom-out;
+}
+.asset-lightbox-img {
+  max-width: min(960px, 92vw);
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  background: #111827;
+  cursor: default;
 }
 .preview-meta {
   display: flex;
