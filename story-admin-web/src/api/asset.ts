@@ -1,5 +1,7 @@
 import http from './http';
 
+export type AssetLinkType = 'NONE' | 'SERIES' | 'ARC' | 'CHARACTER';
+
 export interface AssetItem {
   id: number;
   displayName: string;
@@ -18,6 +20,9 @@ export interface AssetItem {
   chapterRefPlaceholder: string | null;
   tagNames?: string[];
   characterIds?: number[];
+  seriesIds?: number[];
+  arcIds?: number[];
+  linkType?: AssetLinkType;
   createdAt?: string;
   updatedAt?: string;
   deletedAt?: string | null;
@@ -28,10 +33,11 @@ export interface AssetUpdatePayload {
   description: string | null;
   chapterRefPlaceholder: string | null;
   tagNames: string[];
-  characterIds: number[];
+  linkType: AssetLinkType;
+  characterIds?: number[];
+  seriesIds?: number[];
+  arcIds?: number[];
 }
-
-
 
 export function assetContentUrl(id: number, bust?: number | string): string {
   const base = `/api/assets/${id}/content`;
@@ -53,6 +59,9 @@ export async function listAssets(params: {
   q?: string;
   characterFilter?: 'unlinked' | 'all';
   characterId?: number;
+  linkType?: AssetLinkType | '';
+  seriesId?: number;
+  arcId?: number;
 }): Promise<AssetItem[]> {
   const { data } = await http.get<AssetItem[]>('/assets', { params });
   return data;
@@ -68,13 +77,29 @@ export async function updateAsset(id: number, body: AssetUpdatePayload): Promise
   return data;
 }
 
-export async function uploadAssets(categoryId: number, files: File[]): Promise<AssetItem[]> {
+export async function uploadAssets(
+  categoryId: number,
+  files: File[],
+  link?: {
+    linkType?: AssetLinkType;
+    seriesIds?: number[];
+    arcIds?: number[];
+    characterIds?: number[];
+  },
+): Promise<AssetItem[]> {
   const form = new FormData();
   for (const file of files) {
     form.append('files', file);
   }
+  const params: Record<string, unknown> = { categoryId };
+  if (link?.linkType && link.linkType !== 'NONE') {
+    params.linkType = link.linkType;
+    if (link.seriesIds?.length) params.seriesIds = link.seriesIds;
+    if (link.arcIds?.length) params.arcIds = link.arcIds;
+    if (link.characterIds?.length) params.characterIds = link.characterIds;
+  }
   const { data } = await http.post<AssetItem[]>('/assets/upload', form, {
-    params: { categoryId },
+    params,
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;

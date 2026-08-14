@@ -12,10 +12,16 @@ import {
   updateAsset,
   uploadAssets,
   type AssetItem,
+  type AssetLinkType,
+  type AssetUpdatePayload,
 } from '../../api/asset';
 import { useRouter } from 'vue-router';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import { listCharacters, type CharacterItem } from '../../api/character';
+import { listSeries, type SeriesItem } from '../../api/series';
+import { getArc, listArcs, type ArcItem } from '../../api/arc';
+
+type LinkTypeFilter = '' | AssetLinkType;
 
 const router = useRouter();
 const loading = ref(false);
@@ -27,9 +33,15 @@ const previewBust = ref(0);
 const replaceFileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
+const seriesList = ref<SeriesItem[]>([]);
+const filterArcs = ref<ArcItem[]>([]);
+const formArcs = ref<ArcItem[]>([]);
 const selectedCategoryId = ref<number | null>(null);
 const selectedAssetId = ref<number | null>(null);
 const search = ref('');
+const linkTypeFilter = ref<LinkTypeFilter>('');
+const filterSeriesId = ref<number | ''>('');
+const filterArcId = ref<number | ''>('');
 /** 无关联 | 具体人物 id | 全部 */
 const characterFilter = ref<'unlinked' | 'all' | number>('unlinked');
 const indexInput = ref('1');
@@ -38,6 +50,9 @@ const categoryBuckets = reactive<Record<number, AssetItem[]>>({});
 const dragging = ref(false);
 const thumbGroup = { name: 'assets', pull: true, put: false };
 const categoryGroup = { name: 'assets', pull: false, put: true };
+const seriesForArc = ref<number | ''>('');
+let syncingForm = false;
+let syncGen = 0;
 
 type DragChangeEvent = {
   added?: { element: AssetItem; newIndex: number };
@@ -124,6 +139,9 @@ const form = reactive({
   description: '',
   chapterRefPlaceholder: '',
   tagNames: [] as string[],
+  linkType: 'NONE' as AssetLinkType,
+  seriesIds: [] as number[],
+  arcIds: [] as number[],
   characterIds: [] as number[],
 });
 
@@ -140,9 +158,19 @@ const canPrev = computed(() => currentIndex.value > 0);
 const canNext = computed(
   () => currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1,
 );
-/** q 非空或人物不是「全部」时禁用本分类内排序 */
+const showSeriesFilter = computed(
+  () => linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC',
+);
+const showArcFilter = computed(() => linkTypeFilter.value === 'ARC');
+const showCharacterFilter = computed(
+  () => linkTypeFilter.value === '' || linkTypeFilter.value === 'CHARACTER',
+);
+/** q 非空或筛选不是完整分类列表时禁用本分类内排序 */
 const isSearchActive = computed(
-  () => search.value.trim().length > 0 || characterFilter.value !== 'all',
+  () =>
+    search.value.trim().length > 0 ||
+    linkTypeFilter.value !== '' ||
+    (showCharacterFilter.value && characterFilter.value !== 'all'),
 );
 
 function apiError(e: unknown, fallback: string): string {
@@ -165,6 +193,24 @@ async function loadCategories(preferId?: number | null) {
   selectedCategoryId.value = keep;
 }
 
+async function loadFilterArcs(seriesId: number) {
+  try {
+    filterArcs.value = await listArcs(seriesId);
+  } catch (e) {
+    filterArcs.value = [];
+    ElMessage.error(apiError(e, '加载篇章失败'));
+  }
+}
+
+async function loadFormArcs(seriesId: number) {
+  try {
+    formArcs.value = await listArcs(seriesId);
+  } catch (e) {
+    formArcs.value = [];
+    ElMessage.error(apiError(e, '加载篇章失败'));
+  }
+}
+
 async function loadAssets(keepId?: number | null) {
   if (selectedCategoryId.value == null) {
     assets.value = [];
@@ -178,10 +224,28 @@ async function loadAssets(keepId?: number | null) {
       status: 'NORMAL',
       q: search.value.trim() || undefined,
     };
-    if (typeof characterFilter.value === 'number') {
-      listParams.characterId = characterFilter.value;
-    } else {
-      listParams.characterFilter = characterFilter.value;
+    if (linkTypeFilter.value) {
+      listParams.linkType = linkTypeFilter.value;
+    }
+    if (
+      (linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC') &&
+      typeof filterSeriesId.value === 'number'
+    ) {
+      listParams.seriesId = filterSeriesId.value;
+    }
+    if (linkTypeFilter.value === 'ARC' && typeof filterArcId.value === 'number') {
+      listParams.arcId = filterArcId.value;
+    }
+    if (showCharacterFilter.value) {
+      if (typeof characterFilter.value === 'number') {
+        listParams.characterId = characterFilter.value;
+      } else if (linkTypeFilter.value === 'CHARACTER') {
+        if (characterFilter.value !== 'unlinked') {
+          listParams.characterFilter = 'all';
+        }
+      } else {
+        listParams.characterFilter = characterFilter.value;
+      }
     }
     assets.value = await listAssets(listParams);
     const preferred = keepId ?? selectedAssetId.value;
@@ -197,17 +261,73 @@ async function loadAssets(keepId?: number | null) {
   }
 }
 
-function syncForm() {
-  const asset = currentAsset.value;
-  form.displayName = asset?.displayName ?? '';
-  form.description = asset?.description ?? '';
-  form.chapterRefPlaceholder = asset?.chapterRefPlaceholder ?? '';
-  form.tagNames = [...(asset?.tagNames ?? [])];
-  form.characterIds = [...(asset?.characterIds ?? [])];
-  indexInput.value = currentIndex.value >= 0 ? String(currentIndex.value + 1) : '';
+async function ensureSeriesForArc(arcId: number): Promise<void> {
+  const known =
+    formArcs.value.find((a) => a.id === arcId) ?? filterArcs.value.find((a) => a.id === arcId);
+  let sid = known?.seriesId ?? null;
+  if (sid == null) {
+    try {
+      const arc = await getArc(arcId);
+      sid = arc.seriesId ?? null;
+    } catch (e) {
+      ElMessage.error(apiError(e, '加载篇章失败'));
+      return;
+    }
+  }
+  if (sid == null) return;
+  seriesForArc.value = sid;
+  await loadFormArcs(sid);
 }
 
-watch(currentAsset, syncForm, { immediate: true });
+async function syncForm() {
+  const gen = ++syncGen;
+  const asset = currentAsset.value;
+  syncingForm = true;
+  try {
+    form.displayName = asset?.displayName ?? '';
+    form.description = asset?.description ?? '';
+    form.chapterRefPlaceholder = asset?.chapterRefPlaceholder ?? '';
+    form.tagNames = [...(asset?.tagNames ?? [])];
+    form.linkType = asset?.linkType ?? 'NONE';
+    form.seriesIds = [...(asset?.seriesIds ?? [])];
+    form.arcIds = [...(asset?.arcIds ?? [])];
+    form.characterIds = [...(asset?.characterIds ?? [])];
+    indexInput.value = currentIndex.value >= 0 ? String(currentIndex.value + 1) : '';
+    if (form.linkType === 'ARC' && form.arcIds.length) {
+      await ensureSeriesForArc(form.arcIds[0]);
+    } else {
+      seriesForArc.value = '';
+      formArcs.value = [];
+    }
+  } finally {
+    if (gen === syncGen) {
+      syncingForm = false;
+    }
+  }
+}
+
+function onFormLinkTypeChange() {
+  if (syncingForm) return;
+  form.seriesIds = [];
+  form.arcIds = [];
+  form.characterIds = [];
+  seriesForArc.value = '';
+  formArcs.value = [];
+  ElMessage.info('已切换关联类型，请重新选择');
+}
+
+async function onFormSeriesForArcChange(id: number | '') {
+  form.arcIds = [];
+  if (typeof id === 'number') {
+    await loadFormArcs(id);
+  } else {
+    formArcs.value = [];
+  }
+}
+
+watch(currentAsset, () => {
+  void syncForm();
+}, { immediate: true });
 
 watch(selectedAssetId, async () => {
   await nextTick();
@@ -229,6 +349,24 @@ function triggerUpload() {
   fileInput.value?.click();
 }
 
+function uploadLinkFromFilters(): {
+  linkType: AssetLinkType;
+  seriesIds?: number[];
+  arcIds?: number[];
+  characterIds?: number[];
+} | undefined {
+  if (linkTypeFilter.value === 'CHARACTER' && typeof characterFilter.value === 'number') {
+    return { linkType: 'CHARACTER', characterIds: [characterFilter.value] };
+  }
+  if (linkTypeFilter.value === 'SERIES' && typeof filterSeriesId.value === 'number') {
+    return { linkType: 'SERIES', seriesIds: [filterSeriesId.value] };
+  }
+  if (linkTypeFilter.value === 'ARC' && typeof filterArcId.value === 'number') {
+    return { linkType: 'ARC', arcIds: [filterArcId.value] };
+  }
+  return undefined;
+}
+
 async function onFilesPicked(ev: Event) {
   const input = ev.target as HTMLInputElement;
   const files = input.files ? Array.from(input.files) : [];
@@ -236,8 +374,13 @@ async function onFilesPicked(ev: Event) {
   if (!files.length || selectedCategoryId.value == null) return;
   uploading.value = true;
   try {
-    const uploaded = await uploadAssets(selectedCategoryId.value, files);
-    ElMessage.success(`已上传 ${uploaded.length} 份素材`);
+    const link = uploadLinkFromFilters();
+    const uploaded = await uploadAssets(selectedCategoryId.value, files, link);
+    ElMessage.success(
+      link
+        ? `已上传 ${uploaded.length} 份素材，并按当前筛选自动关联`
+        : `已上传 ${uploaded.length} 份素材`,
+    );
     await loadAssets(uploaded[0]?.id ?? null);
   } catch (e) {
     ElMessage.error(apiError(e, '上传失败'));
@@ -278,15 +421,31 @@ async function saveMeta() {
     ElMessage.warning('请填写显示名称');
     return;
   }
+  if (form.linkType === 'SERIES' && !form.seriesIds.length) {
+    ElMessage.warning('请选择关联系列');
+    return;
+  }
+  if (form.linkType === 'ARC' && !form.arcIds.length) {
+    ElMessage.warning('请选择关联篇章');
+    return;
+  }
+  if (form.linkType === 'CHARACTER' && !form.characterIds.length) {
+    ElMessage.warning('请选择关联人物');
+    return;
+  }
   saving.value = true;
   try {
-    const updated = await updateAsset(currentAsset.value.id, {
+    const payload: AssetUpdatePayload = {
       displayName: form.displayName.trim(),
       description: form.description.trim() || null,
       chapterRefPlaceholder: form.chapterRefPlaceholder.trim() || null,
       tagNames: form.tagNames.map((t) => t.trim()).filter(Boolean),
-      characterIds: [...form.characterIds],
-    });
+      linkType: form.linkType,
+      seriesIds: form.linkType === 'SERIES' ? [...form.seriesIds] : [],
+      arcIds: form.linkType === 'ARC' ? [...form.arcIds] : [],
+      characterIds: form.linkType === 'CHARACTER' ? [...form.characterIds] : [],
+    };
+    const updated = await updateAsset(currentAsset.value.id, payload);
     ElMessage.success('已保存');
     await loadAssets(updated.id);
   } catch (e) {
@@ -358,14 +517,40 @@ watch(search, () => {
   }, 250);
 });
 
-watch(characterFilter, () => {
+watch(linkTypeFilter, async (next) => {
+  if (next === 'CHARACTER' && characterFilter.value === 'unlinked') {
+    characterFilter.value = 'all';
+  }
+  if (next !== 'ARC') {
+    filterArcId.value = '';
+    filterArcs.value = [];
+  } else if (typeof filterSeriesId.value === 'number') {
+    await loadFilterArcs(filterSeriesId.value);
+  }
+});
+
+watch(filterSeriesId, async (sid) => {
+  filterArcId.value = '';
+  if (linkTypeFilter.value === 'ARC' && typeof sid === 'number') {
+    await loadFilterArcs(sid);
+  } else if (linkTypeFilter.value !== 'ARC') {
+    filterArcs.value = [];
+  }
+});
+
+watch([linkTypeFilter, filterSeriesId, filterArcId, characterFilter], () => {
   void loadAssets();
 });
 
 onMounted(async () => {
   try {
-    const [chars] = await Promise.all([listCharacters(), loadCategories()]);
+    const [chars, seriesRows] = await Promise.all([
+      listCharacters(),
+      listSeries(),
+      loadCategories(),
+    ]);
     characters.value = chars;
+    seriesList.value = seriesRows;
     await loadAssets();
   } catch (e) {
     ElMessage.error(apiError(e, '加载分类失败'));
@@ -382,11 +567,56 @@ onMounted(async () => {
       </div>
       <div class="toolbar-actions">
         <el-select
+          v-model="linkTypeFilter"
+          placeholder="关联类型"
+          style="width: 128px"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="无" value="NONE" />
+          <el-option label="系列" value="SERIES" />
+          <el-option label="篇章" value="ARC" />
+          <el-option label="人物" value="CHARACTER" />
+        </el-select>
+        <el-select
+          v-if="showSeriesFilter"
+          v-model="filterSeriesId"
+          clearable
+          placeholder="选择系列"
+          style="width: 160px"
+        >
+          <el-option
+            v-for="s in seriesList"
+            :key="s.id"
+            :label="s.name"
+            :value="s.id!"
+          />
+        </el-select>
+        <el-select
+          v-if="showArcFilter"
+          v-model="filterArcId"
+          clearable
+          placeholder="选择篇章"
+          :disabled="typeof filterSeriesId !== 'number'"
+          style="width: 160px"
+        >
+          <el-option
+            v-for="a in filterArcs"
+            :key="a.id"
+            :label="a.title"
+            :value="a.id!"
+          />
+        </el-select>
+        <el-select
+          v-if="showCharacterFilter"
           v-model="characterFilter"
           placeholder="人物筛选"
           style="width: 160px"
         >
-          <el-option label="无关联" value="unlinked" />
+          <el-option
+            v-if="linkTypeFilter === ''"
+            label="无关联"
+            value="unlinked"
+          />
           <el-option
             v-for="c in characters"
             :key="c.id"
@@ -488,10 +718,10 @@ onMounted(async () => {
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
         <p class="drag-tip">
-          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可排序（人物选「全部」且无搜索时）。
+          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可排序（关联筛选为全部、人物选「全部」且无搜索时）。
         </p>
         <p v-if="isSearchActive" class="search-reorder-hint">
-          当前人物筛选或搜索已开启：本分类内排序暂不可用，仍可拖到左侧其它分类。
+          当前关联筛选或搜索已开启：本分类内排序暂不可用，仍可拖到左侧其它分类。
         </p>
         <draggable
           v-model="assets"
@@ -551,7 +781,73 @@ onMounted(async () => {
                 style="width: 100%"
               />
             </el-form-item>
-            <el-form-item label="关联人物">
+            <el-form-item label="关联类型">
+              <el-select
+                v-model="form.linkType"
+                style="width: 100%"
+                @change="onFormLinkTypeChange"
+              >
+                <el-option label="无" value="NONE" />
+                <el-option label="系列" value="SERIES" />
+                <el-option label="篇章" value="ARC" />
+                <el-option label="人物" value="CHARACTER" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="form.linkType === 'SERIES'" label="关联系列">
+              <el-select
+                v-model="form.seriesIds"
+                multiple
+                filterable
+                clearable
+                placeholder="选择系列"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="s in seriesList"
+                  :key="s.id"
+                  :label="s.name"
+                  :value="s.id!"
+                />
+              </el-select>
+            </el-form-item>
+            <template v-if="form.linkType === 'ARC'">
+              <el-form-item label="所属系列">
+                <el-select
+                  v-model="seriesForArc"
+                  clearable
+                  filterable
+                  placeholder="先选择系列"
+                  style="width: 100%"
+                  @change="onFormSeriesForArcChange"
+                >
+                  <el-option
+                    v-for="s in seriesList"
+                    :key="s.id"
+                    :label="s.name"
+                    :value="s.id!"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="关联篇章">
+                <el-select
+                  v-model="form.arcIds"
+                  multiple
+                  filterable
+                  clearable
+                  placeholder="选择篇章"
+                  :disabled="typeof seriesForArc !== 'number'"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="a in formArcs"
+                    :key="a.id"
+                    :label="a.title"
+                    :value="a.id!"
+                  />
+                </el-select>
+              </el-form-item>
+            </template>
+            <el-form-item v-if="form.linkType === 'CHARACTER'" label="关联人物">
               <el-select
                 v-model="form.characterIds"
                 multiple
@@ -626,7 +922,9 @@ onMounted(async () => {
 .toolbar-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+  justify-content: flex-end;
 }
 .editor-actions {
   display: flex;
@@ -643,9 +941,9 @@ onMounted(async () => {
 .pane {
   background: #fff;
   border-radius: 16px;
-  box-shadow: 0 10px 30px #24325212;
   padding: 16px;
   min-height: 520px;
+  box-shadow: 0 10px 30px #24325212;
 }
 .pane-head {
   display: flex;
