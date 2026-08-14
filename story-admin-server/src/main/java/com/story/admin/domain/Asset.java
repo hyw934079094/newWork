@@ -79,6 +79,15 @@ public class Asset {
   @Transient
   private List<Long> characterIds = new ArrayList<>();
 
+  @Transient
+  private List<Long> seriesIds = new ArrayList<>();
+
+  @Transient
+  private List<Long> arcIds = new ArrayList<>();
+
+  @Transient
+  private AssetLinkType linkType = AssetLinkType.NONE;
+
   @PrePersist
   void onCreate() {
     LocalDateTime now = LocalDateTime.now();
@@ -249,5 +258,29 @@ public class Asset {
 
   public void setCharacterIds(List<Long> characterIds) {
     this.characterIds = characterIds == null ? new ArrayList<>() : new ArrayList<>(characterIds);
+  }
+
+  public List<Long> getSeriesIds() {
+    return seriesIds;
+  }
+
+  public void setSeriesIds(List<Long> seriesIds) {
+    this.seriesIds = seriesIds == null ? new ArrayList<>() : new ArrayList<>(seriesIds);
+  }
+
+  public List<Long> getArcIds() {
+    return arcIds;
+  }
+
+  public void setArcIds(List<Long> arcIds) {
+    this.arcIds = arcIds == null ? new ArrayList<>() : new ArrayList<>(arcIds);
+  }
+
+  public AssetLinkType getLinkType() {
+    return linkType;
+  }
+
+  public void setLinkType(AssetLinkType linkType) {
+    this.linkType = linkType == null ? AssetLinkType.NONE : linkType;
   }
 }

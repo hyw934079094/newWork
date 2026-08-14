@@ -1,5 +1,6 @@
 package com.story.admin.dto;
 
+import com.story.admin.domain.AssetLinkType;
 import java.util.List;
 
 public record AssetUpdateRequest(
@@ -7,7 +8,10 @@ public record AssetUpdateRequest(
     String description,
     String chapterRefPlaceholder,
     List<String> tagNames,
-    List<Long> characterIds) {
+    List<Long> characterIds,
+    AssetLinkType linkType,
+    List<Long> seriesIds,
+    List<Long> arcIds) {
 
   public static Builder builder() {
     return new Builder();
@@ -19,6 +23,9 @@ public record AssetUpdateRequest(
     private String chapterRefPlaceholder;
     private List<String> tagNames;
     private List<Long> characterIds;
+    private AssetLinkType linkType;
+    private List<Long> seriesIds;
+    private List<Long> arcIds;
 
     public Builder displayName(String displayName) {
       this.displayName = displayName;
@@ -45,9 +52,31 @@ public record AssetUpdateRequest(
       return this;
     }
 
+    public Builder linkType(AssetLinkType linkType) {
+      this.linkType = linkType;
+      return this;
+    }
+
+    public Builder seriesIds(List<Long> seriesIds) {
+      this.seriesIds = seriesIds;
+      return this;
+    }
+
+    public Builder arcIds(List<Long> arcIds) {
+      this.arcIds = arcIds;
+      return this;
+    }
+
     public AssetUpdateRequest build() {
       return new AssetUpdateRequest(
-          displayName, description, chapterRefPlaceholder, tagNames, characterIds);
+          displayName,
+          description,
+          chapterRefPlaceholder,
+          tagNames,
+          characterIds,
+          linkType,
+          seriesIds,
+          arcIds);
     }
   }
 }

@@ -2,7 +2,10 @@ package com.story.admin.service;
 
 import com.story.admin.domain.AiReferenceItem;
 import com.story.admin.domain.Asset;
+import com.story.admin.domain.AssetArcRel;
 import com.story.admin.domain.AssetCharacterRel;
+import com.story.admin.domain.AssetLinkType;
+import com.story.admin.domain.AssetSeriesRel;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
@@ -13,10 +16,12 @@ import com.story.admin.domain.StorySeries;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AiReferenceItemRepository;
+import com.story.admin.repository.AssetArcRelRepository;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetComboMemberRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.AssetSeriesRelRepository;
 import com.story.admin.repository.AssetTagRelRepository;
 import com.story.admin.repository.AssetTagRepository;
 import com.story.admin.repository.CharacterProfileRepository;
@@ -61,6 +66,8 @@ public class AssetService {
   private final StoryArcRepository storyArcRepository;
   private final PageAssetRefRepository pageAssetRefRepository;
   private final StoryPageRepository storyPageRepository;
+  private final AssetSeriesRelRepository assetSeriesRelRepository;
+  private final AssetArcRelRepository assetArcRelRepository;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -76,7 +83,9 @@ public class AssetService {
       StorySeriesRepository storySeriesRepository,
       StoryArcRepository storyArcRepository,
       PageAssetRefRepository pageAssetRefRepository,
-      StoryPageRepository storyPageRepository) {
+      StoryPageRepository storyPageRepository,
+      AssetSeriesRelRepository assetSeriesRelRepository,
+      AssetArcRelRepository assetArcRelRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -91,10 +100,23 @@ public class AssetService {
     this.storyArcRepository = storyArcRepository;
     this.pageAssetRefRepository = pageAssetRefRepository;
     this.storyPageRepository = storyPageRepository;
+    this.assetSeriesRelRepository = assetSeriesRelRepository;
+    this.assetArcRelRepository = assetArcRelRepository;
   }
 
   @Transactional
   public List<Asset> upload(Long categoryId, MultipartFile[] files) {
+    return upload(categoryId, files, null, null, null, null);
+  }
+
+  @Transactional
+  public List<Asset> upload(
+      Long categoryId,
+      MultipartFile[] files,
+      AssetLinkType linkType,
+      List<Long> seriesIds,
+      List<Long> arcIds,
+      List<Long> characterIds) {
     if (categoryId == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "categoryId is required");
     }
@@ -124,7 +146,17 @@ public class AssetService {
         asset.setHeight(stored.height());
         asset.setSizeBytes(stored.size());
         asset.setChecksum(stored.checksum());
-        saved.add(hydrate(assetRepository.save(asset)));
+        Asset persisted = hydrate(assetRepository.save(asset));
+        if (shouldApplyLinks(linkType, seriesIds, arcIds, characterIds)) {
+          applyLinks(
+              persisted.getId(),
+              resolveUploadLinkType(linkType, seriesIds, arcIds, characterIds),
+              seriesIds,
+              arcIds,
+              characterIds);
+          persisted = hydrate(getRaw(persisted.getId()));
+        }
+        saved.add(persisted);
       }
       return saved;
     } catch (RuntimeException ex) {
@@ -135,10 +167,26 @@ public class AssetService {
 
   public List<Asset> list(
       Long categoryId, String status, String q, String characterFilter, Long characterId) {
+    return list(categoryId, status, q, characterFilter, characterId, null, null, null);
+  }
+
+  public List<Asset> list(
+      Long categoryId,
+      String status,
+      String q,
+      String characterFilter,
+      Long characterId,
+      String linkType,
+      Long seriesId,
+      Long arcId) {
     AssetStatus parsed = parseStatus(status);
     String query = q == null ? "" : q.trim();
     String filter = normalizeCharacterFilter(characterFilter, characterId);
-    return assetRepository.search(categoryId, parsed, query, filter, characterId).stream()
+    String normalizedLinkType = normalizeLinkType(linkType);
+    return assetRepository
+        .search(
+            categoryId, parsed, query, filter, characterId, normalizedLinkType, seriesId, arcId)
+        .stream()
         .map(this::hydrate)
         .toList();
   }
@@ -164,14 +212,16 @@ public class AssetService {
       asset.setDisplayName(req.displayName().trim());
       asset.setDescription(blankToNull(req.description()));
       asset.setChapterRefPlaceholder(blankToNull(req.chapterRefPlaceholder()));
-    } else if (req.tagNames() == null && req.characterIds() == null) {
+    } else if (req.tagNames() == null && req.characterIds() == null && req.linkType() == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName is required");
     }
     assetRepository.save(asset);
     if (req.tagNames() != null) {
       replaceTags(id, req.tagNames());
     }
-    if (req.characterIds() != null) {
+    if (req.linkType() != null) {
+      applyLinks(id, req.linkType(), req.seriesIds(), req.arcIds(), req.characterIds());
+    } else if (req.characterIds() != null) {
       replaceCharacters(id, req.characterIds());
     }
     return get(id);
@@ -219,6 +269,8 @@ public class AssetService {
   public void hardDelete(Long id) {
     Asset asset = getRaw(id);
     List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(id);
+    List<String> seriesLinkNames = assetSeriesRelRepository.findSeriesNamesByAssetId(id);
+    List<String> arcLinkTitles = assetArcRelRepository.findArcTitlesByAssetId(id);
     List<AiReferenceItem> aiRefs = aiReferenceItemRepository.findByAssetId(id);
     List<String> comboNames = comboMemberRepository.findComboNamesByAssetId(id);
     List<String> identityNames = identityAssetRelRepository.findIdentityNamesByAssetId(id);
@@ -228,6 +280,8 @@ public class AssetService {
     List<StoryPage> pageRefs =
         pageIds.isEmpty() ? List.of() : storyPageRepository.findAllById(pageIds);
     if (!characterIds.isEmpty()
+        || !seriesLinkNames.isEmpty()
+        || !arcLinkTitles.isEmpty()
         || !aiRefs.isEmpty()
         || !comboNames.isEmpty()
         || !identityNames.isEmpty()
@@ -236,10 +290,20 @@ public class AssetService {
         || !pageIds.isEmpty()) {
       throw new ConflictException(
           buildReferenceSummary(
-              characterIds, aiRefs, comboNames, identityNames, seriesCovers, arcCovers, pageRefs));
+              characterIds,
+              seriesLinkNames,
+              arcLinkTitles,
+              aiRefs,
+              comboNames,
+              identityNames,
+              seriesCovers,
+              arcCovers,
+              pageRefs));
     }
     tagRelRepository.deleteByAssetId(id);
     characterRelRepository.deleteByAssetId(id);
+    assetSeriesRelRepository.deleteByAssetId(id);
+    assetArcRelRepository.deleteByAssetId(id);
     String storagePath = asset.getStoragePath();
     assetRepository.delete(asset);
     storageService.deleteQuietly(storagePath);
@@ -337,12 +401,7 @@ public class AssetService {
   }
 
   private void replaceCharacters(Long assetId, List<Long> characterIds) {
-    LinkedHashSet<Long> unique = new LinkedHashSet<>();
-    for (Long characterId : characterIds) {
-      if (characterId != null) {
-        unique.add(characterId);
-      }
-    }
+    LinkedHashSet<Long> unique = uniqueIds(characterIds);
     for (Long characterId : unique) {
       if (!characterProfileRepository.existsById(characterId)) {
         throw new ResponseStatusException(
@@ -356,6 +415,93 @@ public class AssetService {
     }
   }
 
+  private void applyLinks(
+      Long assetId,
+      AssetLinkType linkType,
+      List<Long> seriesIds,
+      List<Long> arcIds,
+      List<Long> characterIds) {
+    if (linkType == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "linkType is required");
+    }
+    switch (linkType) {
+      case SERIES -> {
+        LinkedHashSet<Long> unique = uniqueIds(seriesIds);
+        if (unique.isEmpty()) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "seriesIds is required");
+        }
+        for (Long seriesId : unique) {
+          if (!storySeriesRepository.existsById(seriesId)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "series not found: " + seriesId);
+          }
+        }
+        clearArcLinks(assetId);
+        clearCharacterLinks(assetId);
+        writeSeriesLinks(assetId, unique);
+      }
+      case ARC -> {
+        LinkedHashSet<Long> unique = uniqueIds(arcIds);
+        if (unique.isEmpty()) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "arcIds is required");
+        }
+        for (Long arcId : unique) {
+          if (!storyArcRepository.existsById(arcId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "arc not found: " + arcId);
+          }
+        }
+        clearSeriesLinks(assetId);
+        clearCharacterLinks(assetId);
+        writeArcLinks(assetId, unique);
+      }
+      case CHARACTER -> {
+        LinkedHashSet<Long> unique = uniqueIds(characterIds);
+        if (unique.isEmpty()) {
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "characterIds is required");
+        }
+        clearSeriesLinks(assetId);
+        clearArcLinks(assetId);
+        replaceCharacters(assetId, List.copyOf(unique));
+      }
+      case NONE -> {
+        clearSeriesLinks(assetId);
+        clearArcLinks(assetId);
+        clearCharacterLinks(assetId);
+      }
+    }
+  }
+
+  private void writeSeriesLinks(Long assetId, LinkedHashSet<Long> seriesIds) {
+    assetSeriesRelRepository.deleteByAssetId(assetId);
+    assetSeriesRelRepository.flush();
+    for (Long seriesId : seriesIds) {
+      assetSeriesRelRepository.save(new AssetSeriesRel(assetId, seriesId));
+    }
+  }
+
+  private void writeArcLinks(Long assetId, LinkedHashSet<Long> arcIds) {
+    assetArcRelRepository.deleteByAssetId(assetId);
+    assetArcRelRepository.flush();
+    for (Long arcId : arcIds) {
+      assetArcRelRepository.save(new AssetArcRel(assetId, arcId));
+    }
+  }
+
+  private void clearSeriesLinks(Long assetId) {
+    assetSeriesRelRepository.deleteByAssetId(assetId);
+    assetSeriesRelRepository.flush();
+  }
+
+  private void clearArcLinks(Long assetId) {
+    assetArcRelRepository.deleteByAssetId(assetId);
+    assetArcRelRepository.flush();
+  }
+
+  private void clearCharacterLinks(Long assetId) {
+    characterRelRepository.deleteByAssetId(assetId);
+    characterRelRepository.flush();
+  }
+
   private Asset getRaw(Long id) {
     return assetRepository
         .findById(id)
@@ -367,7 +513,13 @@ public class AssetService {
       return asset;
     }
     asset.setTagNames(tagRelRepository.findTagNamesByAssetId(asset.getId()));
-    asset.setCharacterIds(characterRelRepository.findCharacterIdsByAssetId(asset.getId()));
+    List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(asset.getId());
+    List<Long> seriesIds = assetSeriesRelRepository.findSeriesIdsByAssetId(asset.getId());
+    List<Long> arcIds = assetArcRelRepository.findArcIdsByAssetId(asset.getId());
+    asset.setCharacterIds(characterIds);
+    asset.setSeriesIds(seriesIds);
+    asset.setArcIds(arcIds);
+    asset.setLinkType(deriveLinkType(characterIds, seriesIds, arcIds));
     return asset;
   }
 
@@ -401,6 +553,72 @@ public class AssetService {
     return "all";
   }
 
+  private static String normalizeLinkType(String linkType) {
+    if (linkType == null || linkType.isBlank()) {
+      return "";
+    }
+    String normalized = linkType.trim().toUpperCase(Locale.ROOT);
+    try {
+      AssetLinkType.valueOf(normalized);
+    } catch (IllegalArgumentException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid linkType: " + linkType);
+    }
+    return normalized;
+  }
+
+  private static boolean shouldApplyLinks(
+      AssetLinkType linkType, List<Long> seriesIds, List<Long> arcIds, List<Long> characterIds) {
+    if (linkType != null && linkType != AssetLinkType.NONE) {
+      return true;
+    }
+    return hasAnyIds(seriesIds) || hasAnyIds(arcIds) || hasAnyIds(characterIds);
+  }
+
+  private static AssetLinkType resolveUploadLinkType(
+      AssetLinkType linkType, List<Long> seriesIds, List<Long> arcIds, List<Long> characterIds) {
+    if (linkType != null && linkType != AssetLinkType.NONE) {
+      return linkType;
+    }
+    if (hasAnyIds(characterIds)) {
+      return AssetLinkType.CHARACTER;
+    }
+    if (hasAnyIds(arcIds)) {
+      return AssetLinkType.ARC;
+    }
+    return AssetLinkType.SERIES;
+  }
+
+  private static AssetLinkType deriveLinkType(
+      List<Long> characterIds, List<Long> seriesIds, List<Long> arcIds) {
+    if (characterIds != null && !characterIds.isEmpty()) {
+      return AssetLinkType.CHARACTER;
+    }
+    if (arcIds != null && !arcIds.isEmpty()) {
+      return AssetLinkType.ARC;
+    }
+    if (seriesIds != null && !seriesIds.isEmpty()) {
+      return AssetLinkType.SERIES;
+    }
+    return AssetLinkType.NONE;
+  }
+
+  private static boolean hasAnyIds(List<Long> ids) {
+    return ids != null && ids.stream().anyMatch(Objects::nonNull);
+  }
+
+  private static LinkedHashSet<Long> uniqueIds(List<Long> ids) {
+    LinkedHashSet<Long> unique = new LinkedHashSet<>();
+    if (ids == null) {
+      return unique;
+    }
+    for (Long id : ids) {
+      if (id != null) {
+        unique.add(id);
+      }
+    }
+    return unique;
+  }
+
   private static String displayNameFrom(String originalFilename) {
     String name = originalName(originalFilename);
     int dot = name.lastIndexOf('.');
@@ -421,6 +639,8 @@ public class AssetService {
 
   private String buildReferenceSummary(
       List<Long> characterIds,
+      List<String> seriesLinkNames,
+      List<String> arcLinkTitles,
       List<AiReferenceItem> aiRefs,
       List<String> comboNames,
       List<String> identityNames,
@@ -442,6 +662,12 @@ public class AssetService {
                   })
               .collect(Collectors.joining(", "));
       sb.append(" 人物关联: [").append(names).append("].");
+    }
+    if (!seriesLinkNames.isEmpty()) {
+      sb.append(" 系列关联: [").append(String.join(", ", seriesLinkNames)).append("].");
+    }
+    if (!arcLinkTitles.isEmpty()) {
+      sb.append(" 篇章关联: [").append(String.join(", ", arcLinkTitles)).append("].");
     }
     if (!aiRefs.isEmpty()) {
       String items =

@@ -1,6 +1,7 @@
 package com.story.admin.controller;
 
 import com.story.admin.domain.Asset;
+import com.story.admin.domain.AssetLinkType;
 import com.story.admin.dto.AssetMoveRequest;
 import com.story.admin.dto.AssetReorderRequest;
 import com.story.admin.dto.AssetUpdateRequest;
@@ -41,8 +42,13 @@ public class AssetController {
 
   @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public List<Asset> upload(
-      @RequestParam Long categoryId, @RequestParam("files") MultipartFile[] files) {
-    return assetService.upload(categoryId, files);
+      @RequestParam Long categoryId,
+      @RequestParam("files") MultipartFile[] files,
+      @RequestParam(required = false) AssetLinkType linkType,
+      @RequestParam(required = false) List<Long> seriesIds,
+      @RequestParam(required = false) List<Long> arcIds,
+      @RequestParam(required = false) List<Long> characterIds) {
+    return assetService.upload(categoryId, files, linkType, seriesIds, arcIds, characterIds);
   }
 
   @PutMapping("/reorder")
@@ -59,8 +65,12 @@ public class AssetController {
       @RequestParam(required = false, defaultValue = "NORMAL") String status,
       @RequestParam(required = false) String q,
       @RequestParam(required = false) String characterFilter,
-      @RequestParam(required = false) Long characterId) {
-    return assetService.list(categoryId, status, q, characterFilter, characterId);
+      @RequestParam(required = false) Long characterId,
+      @RequestParam(required = false) String linkType,
+      @RequestParam(required = false) Long seriesId,
+      @RequestParam(required = false) Long arcId) {
+    return assetService.list(
+        categoryId, status, q, characterFilter, characterId, linkType, seriesId, arcId);
   }
 
   @GetMapping("/{id}")
