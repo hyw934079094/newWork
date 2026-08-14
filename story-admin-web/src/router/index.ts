@@ -14,10 +14,18 @@ import SeriesList from '../views/series/SeriesList.vue';
 import ArcList from '../views/arcs/ArcList.vue';
 import PageList from '../views/pages/PageList.vue';
 import PageEditor from '../views/pages/PageEditor.vue';
+import Login from '../views/login/Login.vue';
+import { ensureAuth } from '../auth/session';
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: Login,
+      meta: { public: true, layout: 'blank' },
+    },
     { path: '/', name: 'dashboard', component: Dashboard },
     { path: '/assets', name: 'assets-workbench', component: AssetWorkbench },
     { path: '/assets/categories', name: 'assets-categories', component: CategoryManage },
@@ -38,6 +46,26 @@ const router = createRouter({
     { path: '/recycle', name: 'recycle', component: RecycleBin },
     { path: '/config', name: 'sys-config', component: SysConfig },
   ],
+});
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) {
+    if (to.name === 'login') {
+      const user = await ensureAuth();
+      if (user) {
+        return { path: '/' };
+      }
+    }
+    return true;
+  }
+  const user = await ensureAuth();
+  if (!user) {
+    return {
+      name: 'login',
+      query: { redirect: to.fullPath },
+    };
+  }
+  return true;
 });
 
 export default router;

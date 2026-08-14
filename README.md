@@ -11,6 +11,7 @@
 - [故事页面画面组与图文间距](docs/superpowers/specs/2026-08-14-story-page-beat-layout-design.md)：竖滚阅读 + 画面组（一图多文）间距档位（状态：已实现（首期），随篇章/页面模块落地）。
 - [人物身高与素材挑选优化](docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md)：人物可选身高（cm）+ 分类/关键字缩略图挑选弹窗 + 人物管理页排版首期美化（状态：已实现（首期））。
 - [故事系列管理（首期）](docs/superpowers/specs/2026-08-14-story-series-design.md)：系列 CRUD、状态/简介/标签、素材库封面单选与硬删封面 409（状态：已实现（首期））。
+- 管理端基础登录：Session + 种子 `admin/admin`；验收见 [acceptance](docs/superpowers/acceptance/2026-08-14-admin-login.md)。
 
 本仓库采用四项目单仓库结构：
 
@@ -56,9 +57,10 @@
    ```
 
 6. 健康检查：`GET http://localhost:8081/api/health` → `{"status":"ok","service":"story-admin-server"}`。
-7. **组合编排入口**：侧栏「素材管理 → 组合编排」，路由 `/assets/combos`（编辑 `/assets/combos/:id`）；API 前缀 `/api/combos`。
-8. **人物本体入口**：侧栏「人物管理 → 人物本体」，路由 `/character-identities`（编辑 `/character-identities/:id`）；人物列表 `/characters` 含所属本体列与「添加形态」；API 前缀 `/api/character-identities`，升级流 `POST /api/characters/{id}/forms`。
-9. **素材工作台筛选与替换**：路由 `/assets`；默认人物筛选「无关联」（`characterFilter=unlinked`）；详情「替换图片」覆盖原文件（`POST /api/assets/{id}/content`），素材 id / 分类 / 关联不变。
+7. **管理端登录**：浏览器打开 `http://localhost:5174/login`，默认账号 **`admin` / `admin`**（启动时幂等种子；Session 约 8 小时）。侧栏可改密/退出。除健康检查与登录接口外，`/api/**` 需登录（401）。
+8. **组合编排入口**：侧栏「素材管理 → 组合编排」，路由 `/assets/combos`（编辑 `/assets/combos/:id`）；API 前缀 `/api/combos`。
+9. **人物本体入口**：侧栏「人物管理 → 人物本体」，路由 `/character-identities`（编辑 `/character-identities/:id`）；人物列表 `/characters` 含所属本体列与「添加形态」；API 前缀 `/api/character-identities`，升级流 `POST /api/characters/{id}/forms`。
+10. **素材工作台筛选与替换**：路由 `/assets`；默认人物筛选「无关联」（`characterFilter=unlinked`）；详情「替换图片」覆盖原文件（`POST /api/assets/{id}/content`），素材 id / 分类 / 关联不变。
 
 ### 使用端 / 双端一并启动
 

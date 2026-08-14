@@ -1,4 +1,4 @@
-import axios from 'axios';
+import http from './http';
 
 export type ArcStatus = 'DRAFT' | 'WRITING' | 'FINALIZED';
 
@@ -26,28 +26,28 @@ export interface ArcListQuery {
   q?: string;
 }
 
-const client = axios.create({ baseURL: '/api' });
+
 
 export async function listArcs(seriesId: number, query: ArcListQuery = {}): Promise<ArcItem[]> {
-  const { data } = await client.get<ArcItem[]>(`/series/${seriesId}/arcs`, { params: query });
+  const { data } = await http.get<ArcItem[]>(`/series/${seriesId}/arcs`, { params: query });
   return data;
 }
 
 export async function getArc(id: number): Promise<ArcItem> {
-  const { data } = await client.get<ArcItem>(`/arcs/${id}`);
+  const { data } = await http.get<ArcItem>(`/arcs/${id}`);
   return data;
 }
 
 export async function createArc(seriesId: number, body: ArcPayload): Promise<ArcItem> {
-  const { data } = await client.post<ArcItem>(`/series/${seriesId}/arcs`, body);
+  const { data } = await http.post<ArcItem>(`/series/${seriesId}/arcs`, body);
   return data;
 }
 
 export async function updateArc(id: number, body: ArcPayload): Promise<ArcItem> {
-  const { data } = await client.put<ArcItem>(`/arcs/${id}`, body);
+  const { data } = await http.put<ArcItem>(`/arcs/${id}`, body);
   return data;
 }
 
 export async function deleteArc(id: number): Promise<void> {
-  await client.delete(`/arcs/${id}`);
+  await http.delete(`/arcs/${id}`);
 }

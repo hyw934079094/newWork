@@ -1,4 +1,4 @@
-import axios from 'axios';
+import http from './http';
 
 export interface AssetItem {
   id: number;
@@ -31,7 +31,7 @@ export interface AssetUpdatePayload {
   characterIds: number[];
 }
 
-const client = axios.create({ baseURL: '/api' });
+
 
 export function assetContentUrl(id: number, bust?: number | string): string {
   const base = `/api/assets/${id}/content`;
@@ -41,7 +41,7 @@ export function assetContentUrl(id: number, bust?: number | string): string {
 export async function replaceAssetContent(id: number, file: File): Promise<AssetItem> {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await client.post<AssetItem>(`/assets/${id}/content`, form, {
+  const { data } = await http.post<AssetItem>(`/assets/${id}/content`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;
@@ -54,17 +54,17 @@ export async function listAssets(params: {
   characterFilter?: 'unlinked' | 'all';
   characterId?: number;
 }): Promise<AssetItem[]> {
-  const { data } = await client.get<AssetItem[]>('/assets', { params });
+  const { data } = await http.get<AssetItem[]>('/assets', { params });
   return data;
 }
 
 export async function getAsset(id: number): Promise<AssetItem> {
-  const { data } = await client.get<AssetItem>(`/assets/${id}`);
+  const { data } = await http.get<AssetItem>(`/assets/${id}`);
   return data;
 }
 
 export async function updateAsset(id: number, body: AssetUpdatePayload): Promise<AssetItem> {
-  const { data } = await client.put<AssetItem>(`/assets/${id}`, body);
+  const { data } = await http.put<AssetItem>(`/assets/${id}`, body);
   return data;
 }
 
@@ -73,7 +73,7 @@ export async function uploadAssets(categoryId: number, files: File[]): Promise<A
   for (const file of files) {
     form.append('files', file);
   }
-  const { data } = await client.post<AssetItem[]>('/assets/upload', form, {
+  const { data } = await http.post<AssetItem[]>('/assets/upload', form, {
     params: { categoryId },
     headers: { 'Content-Type': 'multipart/form-data' },
   });
@@ -84,27 +84,27 @@ export async function reorderAssets(body: {
   categoryId: number;
   orderedIds: number[];
 }): Promise<void> {
-  await client.put('/assets/reorder', body);
+  await http.put('/assets/reorder', body);
 }
 
 export async function moveAsset(
   id: number,
   body: { targetCategoryId: number; targetIndex: number },
 ): Promise<AssetItem> {
-  const { data } = await client.put<AssetItem>(`/assets/${id}/move`, body);
+  const { data } = await http.put<AssetItem>(`/assets/${id}/move`, body);
   return data;
 }
 
 export async function recycleAsset(id: number): Promise<AssetItem> {
-  const { data } = await client.post<AssetItem>(`/assets/${id}/recycle`);
+  const { data } = await http.post<AssetItem>(`/assets/${id}/recycle`);
   return data;
 }
 
 export async function restoreAsset(id: number): Promise<AssetItem> {
-  const { data } = await client.post<AssetItem>(`/assets/${id}/restore`);
+  const { data } = await http.post<AssetItem>(`/assets/${id}/restore`);
   return data;
 }
 
 export async function hardDeleteAsset(id: number): Promise<void> {
-  await client.delete(`/assets/${id}`);
+  await http.delete(`/assets/${id}`);
 }

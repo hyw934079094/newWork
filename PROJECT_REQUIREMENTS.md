@@ -319,7 +319,7 @@ AI 生成文字、插图及未来的视频
 8. 查看系列详情、篇章列表并阅读图文内容。
 9. 浏览和下载被允许公开下载的 CG。
 
-首期不包含：登录权限、付费、收藏、评论、复杂推荐、正式 AI 生成接入和视频生成/播放。数据结构应为 AI、视频和权限扩展预留空间。
+首期不包含：使用端登录权限、付费、收藏、评论、复杂推荐、正式 AI 生成接入和视频生成/播放。管理端已具备基础 Session 登录（默认本地账号见 README）。数据结构应为 AI、视频和更细权限扩展预留空间。
 
 ## 7. 后续设计工作
 
@@ -338,6 +338,7 @@ AI 生成文字、插图及未来的视频
 - **文件存储（首期）**：项目路径下 `storage/`（不接对象存储，**纳入 Git 管理**）。数据库只保存相对路径与元数据；管理端变更文件后应提交 `storage/`。后续若迁移 OSS，仅替换存储实现与路径前缀。
 - **素材模块设计**：见 [`docs/superpowers/specs/2026-08-13-asset-module-design.md`](docs/superpowers/specs/2026-08-13-asset-module-design.md)。
 - **组合编排设计**：见 [`docs/superpowers/specs/2026-08-13-asset-combo-design.md`](docs/superpowers/specs/2026-08-13-asset-combo-design.md)。
+- **管理端登录（基础）**：Session Cookie；默认种子账号 `admin` / `admin`（仅本地开发，上线前务必改密）；会话约 8 小时；API 除 `GET /api/health` 与 `POST /api/auth/login` 外需登录。
 
 ## 9. 尚未确定的事项
 

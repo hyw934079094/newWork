@@ -1,4 +1,4 @@
-import axios from 'axios';
+import http from './http';
 
 export interface ComboMemberView {
   memberNo: number;
@@ -46,28 +46,28 @@ export interface ComboUpsertPayload {
   stepHolds: ComboStepHoldPayload[];
 }
 
-const client = axios.create({ baseURL: '/api' });
+
 
 export async function listCombos(): Promise<ComboDetail[]> {
-  const { data } = await client.get<ComboDetail[]>('/combos');
+  const { data } = await http.get<ComboDetail[]>('/combos');
   return data;
 }
 
 export async function getCombo(id: number): Promise<ComboDetail> {
-  const { data } = await client.get<ComboDetail>(`/combos/${id}`);
+  const { data } = await http.get<ComboDetail>(`/combos/${id}`);
   return data;
 }
 
 export async function createCombo(body: ComboUpsertPayload): Promise<ComboDetail> {
-  const { data } = await client.post<ComboDetail>('/combos', body);
+  const { data } = await http.post<ComboDetail>('/combos', body);
   return data;
 }
 
 export async function updateCombo(id: number, body: ComboUpsertPayload): Promise<ComboDetail> {
-  const { data } = await client.put<ComboDetail>(`/combos/${id}`, body);
+  const { data } = await http.put<ComboDetail>(`/combos/${id}`, body);
   return data;
 }
 
 export async function removeCombo(id: number): Promise<void> {
-  await client.delete(`/combos/${id}`);
+  await http.delete(`/combos/${id}`);
 }

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import http from './http';
 
 export interface AssetCategoryItem {
   id: number;
@@ -21,15 +21,15 @@ export interface CategoryUpdatePayload {
   sortOrder?: number;
 }
 
-const client = axios.create({ baseURL: '/api' });
+
 
 export async function listCategories(): Promise<AssetCategoryItem[]> {
-  const { data } = await client.get<AssetCategoryItem[]>('/categories');
+  const { data } = await http.get<AssetCategoryItem[]>('/categories');
   return data;
 }
 
 export async function createCategory(body: CategoryCreatePayload): Promise<AssetCategoryItem> {
-  const { data } = await client.post<AssetCategoryItem>('/categories', body);
+  const { data } = await http.post<AssetCategoryItem>('/categories', body);
   return data;
 }
 
@@ -37,10 +37,10 @@ export async function updateCategory(
   id: number,
   body: CategoryUpdatePayload,
 ): Promise<AssetCategoryItem> {
-  const { data } = await client.put<AssetCategoryItem>(`/categories/${id}`, body);
+  const { data } = await http.put<AssetCategoryItem>(`/categories/${id}`, body);
   return data;
 }
 
 export async function deleteCategory(id: number): Promise<void> {
-  await client.delete(`/categories/${id}`);
+  await http.delete(`/categories/${id}`);
 }
