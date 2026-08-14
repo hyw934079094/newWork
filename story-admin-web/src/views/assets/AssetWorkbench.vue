@@ -429,26 +429,32 @@ onMounted(async () => {
         </div>
         <ul>
           <li v-for="cat in categories" :key="cat.id">
-            <draggable
-              :list="bucketFor(cat.id)"
-              item-key="id"
-              :group="categoryGroup"
-              :animation="150"
-              :empty-insert-threshold="48"
-              class="category-drop"
+            <div
+              class="category-drop-wrap"
               :class="{ active: cat.id === selectedCategoryId, 'drop-ready': dragging }"
-              @change="onDropOnCategory(cat.id, $event)"
-              @click="selectCategory(cat.id)"
             >
-              <template #header>
-                <div class="cat-row">
-                  <span class="cat-name">{{ cat.name }}</span>
-                </div>
-              </template>
-              <template #item="{ element }">
-                <span class="drop-chip">{{ element.displayName }}</span>
-              </template>
-            </draggable>
+              <button
+                type="button"
+                class="cat-row"
+                @click="selectCategory(cat.id)"
+              >
+                <span class="cat-name">{{ cat.name }}</span>
+                <span v-if="dragging && cat.id !== selectedCategoryId" class="drop-hint">放到此处</span>
+              </button>
+              <draggable
+                :list="bucketFor(cat.id)"
+                item-key="id"
+                :group="categoryGroup"
+                :animation="150"
+                :empty-insert-threshold="64"
+                class="category-drop-zone"
+                @change="onDropOnCategory(cat.id, $event)"
+              >
+                <template #item="{ element }">
+                  <span class="drop-chip">{{ element.displayName }}</span>
+                </template>
+              </draggable>
+            </div>
           </li>
         </ul>
         <p v-if="!categories.length" class="empty">
@@ -481,8 +487,11 @@ onMounted(async () => {
           </div>
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
+        <p class="drag-tip">
+          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可排序（人物选「全部」且无搜索时）。
+        </p>
         <p v-if="isSearchActive" class="search-reorder-hint">
-          搜索或人物非「全部」时不可在本分类内排序；人物选「全部」且清空搜索后可拖拽排序，仍可将素材拖到左侧其它分类。
+          当前人物筛选或搜索已开启：本分类内排序暂不可用，仍可拖到左侧其它分类。
         </p>
         <draggable
           v-model="assets"
@@ -497,19 +506,22 @@ onMounted(async () => {
           @change="onThumbsChange"
         >
           <template #item="{ element, index }">
-            <button
-              type="button"
+            <div
               class="thumb"
               :class="{ active: element.id === selectedAssetId }"
+              role="button"
+              tabindex="0"
               :data-thumb-id="element.id"
               :title="`${index + 1}. ${element.displayName}`"
               @click="selectAsset(element.id)"
+              @keydown.enter.prevent="selectAsset(element.id)"
             >
               <img
                 :src="assetContentUrl(element.id, previewBust || undefined)"
                 :alt="element.displayName"
+                draggable="false"
               />
-            </button>
+            </div>
           </template>
         </draggable>
       </section>
@@ -649,29 +661,68 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
 }
-.category-drop {
-  min-height: 40px;
+.category-drop-wrap {
+  position: relative;
+  min-height: 44px;
   border-radius: 10px;
-  cursor: pointer;
+  overflow: hidden;
 }
-.category-drop.active {
+.category-drop-wrap.active {
   background: #eef3ff;
   color: #3b5bcc;
   font-weight: 600;
 }
-.category-drop.drop-ready {
-  outline: 1px dashed #9aa8d9;
-  outline-offset: -1px;
+.category-drop-wrap.drop-ready {
+  outline: 2px dashed #5b7cfa;
+  outline-offset: -2px;
+  background: #f3f6ff;
+}
+.category-drop-wrap.drop-ready.active {
+  outline-color: #9aa8d9;
+  background: #eef3ff;
+}
+.category-drop-zone {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-height: 44px;
+  pointer-events: none;
+}
+.category-drop-wrap.drop-ready .category-drop-zone {
+  z-index: 2;
+  pointer-events: auto;
 }
 .cat-row {
+  position: relative;
+  z-index: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.category-drop-wrap.drop-ready .cat-row {
+  pointer-events: none;
+}
+.drop-hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b5bcc;
 }
 .drop-chip {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 .cat-name {
   color: #172033;
@@ -679,8 +730,13 @@ onMounted(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.category-drop.active .cat-name {
+.category-drop-wrap.active .cat-name {
   color: #3b5bcc;
+}
+.drag-tip {
+  margin: 0;
+  font-size: 12px;
+  color: #6f7e9d;
 }
 .preview {
   display: flex;
