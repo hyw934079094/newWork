@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 人物增加可选身高（厘米）；人物编辑用分类+关键字+缩略图弹窗挑选素材；删人物时忽略/清理 DELETED 幽灵关联。
+**Goal:** 人物增加可选身高（厘米）；人物编辑用分类+关键字+缩略图弹窗挑选素材；删人物时忽略/清理 DELETED 幽灵关联；人物管理页排版/交互首期美化。
 
-**Architecture:** Flyway `V5` 增加 `height_cm`；扩展 Character DTO/Service 校验与透传；`CharacterService.delete` 仅对 NORMAL 关联 409，否则清 rel 后删人；`CharacterList.vue` 去掉文字多选，改为二级挑选弹窗复用 `listAssets` + `listCategories`。
+**Architecture:** Flyway `V5` 增加 `height_cm`；扩展 Character DTO/Service 校验与透传；`CharacterService.delete` 仅对 NORMAL 关联 409，否则清 rel 后删人；`CharacterList.vue` 去掉文字多选，改为二级挑选弹窗复用 `listAssets` + `listCategories`，并整理筛选区/表格操作/弹窗两列布局。
 
 **Tech Stack:** Java 17+、Spring Boot 3.3、JPA/Flyway、Vue 3、Element Plus
 
@@ -15,6 +15,7 @@
 - 在 `master` 上直接提交
 - 身高：`height_cm` / JSON `heightCm`，Integer 可空；有值须 ∈ [1, 300]
 - 挑选：仅人物编辑；筛选分类+关键字；`status=NORMAL`；确定不自动保存关联
+- UI 美化：仅人物管理页（筛选网格、操作更多菜单、编辑两列、挑选卡片）；不做整站换肤
 - 删人物：仅 NORMAL 关联挡删除；DELETED 先删 `asset_character_rel`
 - Git：`D:\tool\Git\bin\git.exe` + `-F` UTF-8 无 BOM；若注入 `--trailer` 用 `cmd /c`
 - JDK：`JAVA_HOME=D:\jdk\jdk-24.0.1`；Node：`D:\tool\nvm\v22.17.0`
@@ -215,7 +216,7 @@ git commit -m "fix: allow deleting character with only recycled asset links"
 
 ---
 
-### Task 3: 人物身高 UI
+### Task 3: 人物身高 UI + 列表/编辑排版美化
 
 **Files:**
 - Modify: `story-admin-web/src/api/character.ts`
@@ -223,37 +224,48 @@ git commit -m "fix: allow deleting character with only recycled asset links"
 
 **Interfaces:**
 - Consumes: API `heightCm`
-- Produces: 表单可编辑；列表展示 `{n} cm` / `-`
+- Produces: 表单可编辑；列表展示 `{n} cm` / `-`；筛选区/表格操作/编辑弹窗两列布局（Spec §6）
 
 - [ ] **Step 1: 类型**
 
 `CharacterItem` / `CharacterPayload` / `CharacterFormNewCharacter` 增加 `heightCm: number | null`（create payload 允许 null）。
 
-- [ ] **Step 2: 表单与列表**
+- [ ] **Step 2: 身高字段接入**
 
 - `form` / `resetForm` / `openEdit` / `payload()` 带上 `heightCm`
-- 编辑表单项：`el-input-number` 或数字输入，label「身高 (cm)」，可清空
-- `el-table-column`：formatter 有值 → `` `${row.heightCm} cm` ``，否则 `-`
-- 「添加形态」弹窗若复用 create 字段，可一并带 `heightCm`（可空即可）
+- 编辑表单项：`el-input-number`（可清空），label「身高 (cm)」
+- `el-table-column`：有值 → `` `${row.heightCm} cm` ``，否则 `-`
 
-- [ ] **Step 3: build + Commit**
+- [ ] **Step 3: 列表页排版**
+
+- 筛选：CSS 网格/flex，统一 `el-form-item` 间距与控件最小宽度，避免一字换行；查询/重置成组
+- 表格操作：保留「预览」「编辑」为 link/主操作；「添加形态」「删除」收入 `el-dropdown`「更多」
+- 表头区保持简洁，不堆叠多余装饰
+
+- [ ] **Step 4: 编辑弹窗布局**
+
+- `width` ≈ `840px`
+- 基础字段两列：姓名|别名、所属故事|身高、性别|年龄/阶段、种族|身份/职业；公开简介/内部说明整行
+- 素材区：分区标题 + 已关联缩略图固定边长、标题 `ellipsis`；按钮组「上传预览图」「从素材库指定」「保存关联」同行不挤
+
+- [ ] **Step 5: build + Commit**
 
 ```bash
 cd d:\study\mine\newWork\story-admin-web
 set Path=D:\tool\nvm\v22.17.0;%Path%
 npm run build
-git commit -m "feat: show and edit character height in admin UI"
+git commit -m "feat: character height UI and list/editor layout polish"
 ```
 
 Expected: `vue-tsc -b && vite build` PASS
 
 ---
 
-### Task 4: 素材挑选弹窗 UI
+### Task 4: 素材挑选弹窗 UI（含挑选区排版）
 
 **Files:**
 - Modify: `story-admin-web/src/views/characters/CharacterList.vue`
--（可选）若分类 API 未引入：`import { listCategories } from '../../api/category'`
+- Import: `listCategories` from `../../api/category`
 - 使用现有 `listAssets`、`assetContentUrl`
 
 **Interfaces:**
@@ -262,7 +274,7 @@ Expected: `vue-tsc -b && vite build` PASS
 
 - [ ] **Step 1: 去掉文字 `el-select` library-pick**
 
-删除「从素材库指定」的 `el-select` 块。
+删除「从素材库指定」的 `el-select` 块，改为打开挑选弹窗的按钮。
 
 - [ ] **Step 2: 挑选弹窗状态**
 
@@ -276,7 +288,7 @@ const pickerLoading = ref(false);
 const categories = ref<AssetCategoryItem[]>([]);
 ```
 
-- [ ] **Step 3: 打开/加载/确定**
+- [ ] **Step 3: 打开/加载/确定 + 网格样式**
 
 ```ts
 async function openAssetPicker() {
@@ -309,7 +321,9 @@ function confirmAssetPicker() {
 }
 ```
 
-网格：点击切换 id 是否在 `pickerSelectedIds`；缩略图 `assetContentUrl(id)`；底栏显示已选数量。
+- 顶栏：分类 + 关键字同一行，间距固定  
+- 网格：固定卡片宽高；选中描边/高亮；标题单行省略  
+- 底栏：已选数量 + 取消/确定  
 
 - [ ] **Step 4: build + Commit**
 
@@ -324,7 +338,7 @@ git commit -m "feat: character asset picker dialog with category keyword thumbs"
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md` — 状态 → 已实现（首期）
-- Modify: `README.md` — 一句：人物身高 + 挑选弹窗
+- Modify: `README.md` — 一句：人物身高 + 挑选弹窗 + 人物页排版首期
 - Modify: 本计划文末追加验收表；勾选 Tasks
 
 - [ ] **Step 1: 后端验收**
@@ -333,11 +347,11 @@ git commit -m "feat: character asset picker dialog with category keyword thumbs"
 mvn -q -Dtest=CharacterServiceTest test
 ```
 
-对照 Spec §6：身高合法/非法；删仅 DELETED；NORMAL 仍 409。
+对照 Spec §7：身高合法/非法；删仅 DELETED；NORMAL 仍 409。
 
 - [ ] **Step 2: 前端**
 
-`npm run build` PASS；浏览器点验标 PARTIAL 可接受（分类/关键字/缩略图/保存关联）。
+`npm run build` PASS；浏览器点验标 PARTIAL 可接受（分类/关键字/缩略图/保存关联；筛选与弹窗无明显一字换行）。
 
 - [ ] **Step 3: 文档 + Commit**
 
@@ -355,6 +369,7 @@ git commit -m "docs: record character height and asset picker acceptance"
 | 挑选弹窗分类+关键字+缩略图 | Task 4 |
 | 确定不自动保存关联 | Task 4 |
 | 删人物 DELETED 幽灵 | Task 2 |
+| 人物页排版美化 §6 | Task 3, 4 |
 | 验收文档 | Task 5 |
 
 ## Notes
@@ -362,3 +377,4 @@ git commit -m "docs: record character height and asset picker acceptance"
 - `CharacterCreateRequest` 末尾加字段后，**所有** Java 构造调用必须补参（含 Identity 相关测试）
 - 重启后端后 Flyway V5 才会打到 MySQL；前端 Vite 热更新即可
 - 勿提交 `pic/`；`storage/` 变更另议
+- 其它管理页美化不在本计划；完成后可另开「工作台美化」计划
