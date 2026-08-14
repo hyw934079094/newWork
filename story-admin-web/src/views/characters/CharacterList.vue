@@ -70,6 +70,7 @@ const form = reactive({
   race: '',
   occupation: '',
   storyName: '',
+  heightCm: null as number | null,
   publicIntro: '',
   internalNote: '',
 });
@@ -93,6 +94,10 @@ function formatIdentityCell(row: CharacterItem): string {
   return `#${row.identityId}`;
 }
 
+function formatHeight(row: CharacterItem): string {
+  return row.heightCm != null ? `${row.heightCm} cm` : '-';
+}
+
 function resetForm() {
   form.name = '';
   form.alias = '';
@@ -101,6 +106,7 @@ function resetForm() {
   form.race = '';
   form.occupation = '';
   form.storyName = '';
+  form.heightCm = null;
   form.publicIntro = '';
   form.internalNote = '';
   linkedAssets.value = [];
@@ -185,6 +191,7 @@ async function openEdit(row: CharacterItem) {
   form.race = row.race ?? '';
   form.occupation = row.occupation ?? '';
   form.storyName = row.storyName ?? '';
+  form.heightCm = row.heightCm ?? null;
   form.publicIntro = row.publicIntro ?? '';
   form.internalNote = row.internalNote ?? '';
   dialogVisible.value = true;
@@ -203,6 +210,7 @@ function payload() {
     race: form.race.trim() || null,
     occupation: form.occupation.trim() || null,
     storyName: form.storyName.trim() || null,
+    heightCm: form.heightCm,
     publicIntro: form.publicIntro.trim() || null,
     internalNote: form.internalNote.trim() || null,
   };
@@ -249,6 +257,14 @@ async function remove(row: CharacterItem) {
     if (e === 'cancel' || e === 'close') return;
     const msg = e?.response?.data?.message || '删除失败';
     ElMessage.error(msg);
+  }
+}
+
+function onMoreCommand(command: string, row: CharacterItem) {
+  if (command === 'addForm') {
+    openAddForm(row);
+  } else if (command === 'delete') {
+    void remove(row);
   }
 }
 
@@ -408,24 +424,54 @@ onMounted(load);
 
     <el-form class="filters" :inline="true" @submit.prevent="load">
       <el-form-item label="关键词">
-        <el-input v-model="filters.q" clearable placeholder="姓名 / 别名 / 编号 / 职业" style="width: 200px" />
+        <el-input
+          v-model="filters.q"
+          clearable
+          placeholder="姓名 / 别名 / 编号 / 职业"
+          class="filter-control filter-control--wide"
+        />
       </el-form-item>
       <el-form-item label="故事">
-        <el-input v-model="filters.storyName" clearable placeholder="所属故事/系列" style="width: 160px" />
+        <el-input
+          v-model="filters.storyName"
+          clearable
+          placeholder="所属故事/系列"
+          class="filter-control"
+        />
       </el-form-item>
       <el-form-item label="性别">
-        <el-input v-model="filters.gender" clearable placeholder="如 女" style="width: 100px" />
+        <el-input
+          v-model="filters.gender"
+          clearable
+          placeholder="如 女"
+          class="filter-control filter-control--sm"
+        />
       </el-form-item>
       <el-form-item label="年龄/阶段">
-        <el-input v-model="filters.ageStage" clearable placeholder="如 青年" style="width: 110px" />
+        <el-input
+          v-model="filters.ageStage"
+          clearable
+          placeholder="如 青年"
+          class="filter-control filter-control--md"
+        />
       </el-form-item>
       <el-form-item label="种族">
-        <el-input v-model="filters.race" clearable placeholder="如 人类" style="width: 110px" />
+        <el-input
+          v-model="filters.race"
+          clearable
+          placeholder="如 人类"
+          class="filter-control filter-control--md"
+        />
       </el-form-item>
       <el-form-item label="身份/职业">
-        <el-input v-model="filters.occupation" clearable placeholder="如 怪盗" style="width: 120px" />
+        <el-input
+          v-model="filters.occupation"
+          clearable
+          placeholder="如 怪盗"
+          class="filter-control"
+        />
       </el-form-item>
-      <el-form-item>
+      <el-form-item class="filters-actions">
         <el-button type="primary" :loading="loading" native-type="submit">查询</el-button>
         <el-button
           @click="
@@ -439,15 +485,20 @@ onMounted(load);
     </el-form>
 
     <el-table v-loading="loading" :data="rows" stripe empty-text="暂无人物">
-      <el-table-column prop="code" label="编号" width="110" />
-      <el-table-column prop="name" label="姓名" min-width="110" />
-      <el-table-column prop="alias" label="别名" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="storyName" label="所属故事" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="gender" label="性别" width="70" />
-      <el-table-column prop="ageStage" label="年龄/阶段" width="100" />
-      <el-table-column prop="race" label="种族" width="90" />
-      <el-table-column prop="occupation" label="身份/职业" min-width="110" show-overflow-tooltip />
-      <el-table-column label="所属本体" min-width="160" show-overflow-tooltip>
+      <el-table-column prop="code" label="编号" width="100" />
+      <el-table-column prop="name" label="姓名" min-width="100" />
+      <el-table-column prop="alias" label="别名" min-width="90" show-overflow-tooltip />
+      <el-table-column prop="storyName" label="所属故事" min-width="110" show-overflow-tooltip />
+      <el-table-column label="身高" width="88">
+        <template #default="{ row }">
+          {{ formatHeight(row) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="gender" label="性别" width="64" />
+      <el-table-column prop="ageStage" label="年龄/阶段" width="96" />
+      <el-table-column prop="race" label="种族" width="80" />
+      <el-table-column prop="occupation" label="身份/职业" min-width="100" show-overflow-tooltip />
+      <el-table-column label="所属本体" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">
           <router-link
             v-if="row.identityId != null"
@@ -458,14 +509,27 @@ onMounted(load);
           </router-link>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="168" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openPreview(row)">预览</el-button>
-          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button link type="primary" @click="openAddForm(row)">
-            {{ row.identityId != null ? '再添加形态' : '添加形态' }}
-          </el-button>
-          <el-button link type="danger" @click="remove(row)">删除</el-button>
+          <div class="row-actions">
+            <el-button link type="primary" @click="openPreview(row)">预览</el-button>
+            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-dropdown trigger="click" @command="(cmd: string) => onMoreCommand(cmd, row)">
+              <el-button link type="primary">
+                更多
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="addForm">
+                    {{ row.identityId != null ? '再添加形态' : '添加形态' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -473,31 +537,45 @@ onMounted(load);
     <el-dialog
       v-model="dialogVisible"
       :title="editing ? '编辑人物' : '新增人物'"
-      width="720px"
+      width="840px"
       destroy-on-close
+      class="character-edit-dialog"
     >
-      <el-form label-width="96px">
-        <el-form-item label="姓名" required>
-          <el-input v-model="form.name" placeholder="如 女怪盗" />
-        </el-form-item>
-        <el-form-item label="别名">
-          <el-input v-model="form.alias" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="所属故事">
-          <el-input v-model="form.storyName" placeholder="如 暗夜物语" />
-        </el-form-item>
-        <el-form-item label="性别">
-          <el-input v-model="form.gender" placeholder="如 女" />
-        </el-form-item>
-        <el-form-item label="年龄/阶段">
-          <el-input v-model="form.ageStage" placeholder="如 青年" />
-        </el-form-item>
-        <el-form-item label="种族">
-          <el-input v-model="form.race" placeholder="如 人类" />
-        </el-form-item>
-        <el-form-item label="身份/职业">
-          <el-input v-model="form.occupation" placeholder="如 怪盗" />
-        </el-form-item>
+      <el-form label-width="100px" class="edit-form">
+        <div class="form-grid">
+          <el-form-item label="姓名" required>
+            <el-input v-model="form.name" placeholder="如 女怪盗" />
+          </el-form-item>
+          <el-form-item label="别名">
+            <el-input v-model="form.alias" placeholder="可选" />
+          </el-form-item>
+          <el-form-item label="所属故事">
+            <el-input v-model="form.storyName" placeholder="如 暗夜物语" />
+          </el-form-item>
+          <el-form-item label="身高 (cm)">
+            <el-input-number
+              v-model="form.heightCm"
+              :min="1"
+              :max="300"
+              :step="1"
+              controls-position="right"
+              placeholder="可选"
+              class="height-input"
+            />
+          </el-form-item>
+          <el-form-item label="性别">
+            <el-input v-model="form.gender" placeholder="如 女" />
+          </el-form-item>
+          <el-form-item label="年龄/阶段">
+            <el-input v-model="form.ageStage" placeholder="如 青年" />
+          </el-form-item>
+          <el-form-item label="种族">
+            <el-input v-model="form.race" placeholder="如 人类" />
+          </el-form-item>
+          <el-form-item label="身份/职业">
+            <el-input v-model="form.occupation" placeholder="如 怪盗" />
+          </el-form-item>
+        </div>
         <el-form-item label="公开简介">
           <el-input v-model="form.publicIntro" type="textarea" :rows="2" />
         </el-form-item>
@@ -508,7 +586,7 @@ onMounted(load);
 
       <div class="asset-panel">
         <div class="asset-panel-head">
-          <strong>人物预览素材</strong>
+          <strong class="asset-panel-title">人物预览素材</strong>
           <div class="asset-panel-actions">
             <input
               ref="fileInput"
@@ -538,7 +616,7 @@ onMounted(load);
             <div v-for="asset in linkedAssets" :key="asset.id" class="thumb-card">
               <img :src="assetContentUrl(asset.id)" :alt="asset.displayName" />
               <div class="thumb-meta">
-                <span>{{ asset.displayName }}</span>
+                <span :title="asset.displayName">{{ asset.displayName }}</span>
                 <el-button link type="danger" @click="unlinkAsset(asset.id)">移除</el-button>
               </div>
             </div>
@@ -553,7 +631,7 @@ onMounted(load);
               collapse-tags
               collapse-tags-tooltip
               placeholder="选择已有素材"
-              style="width: 100%"
+              class="library-select"
             >
               <el-option
                 v-for="asset in libraryAssets"
@@ -667,14 +745,65 @@ onMounted(load);
   margin: 8px 0 0;
 }
 .filters {
-  padding: 16px 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 12px;
+  padding: 16px 16px 4px;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 10px 30px #24325212;
 }
+.filters :deep(.el-form-item) {
+  margin-right: 0;
+  margin-bottom: 12px;
+}
+.filters :deep(.el-form-item__label) {
+  white-space: nowrap;
+}
+.filters :deep(.el-form-item__content) {
+  flex-wrap: nowrap;
+}
+.filter-control {
+  width: 140px;
+  min-width: 140px;
+}
+.filter-control--wide {
+  width: 220px;
+  min-width: 220px;
+}
+.filter-control--md {
+  width: 120px;
+  min-width: 120px;
+}
+.filter-control--sm {
+  width: 96px;
+  min-width: 96px;
+}
+.filters-actions {
+  margin-left: auto;
+}
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  white-space: nowrap;
+}
+.edit-form .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+}
+.edit-form .form-grid :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+.height-input {
+  width: 100%;
+}
 .asset-panel {
   margin-top: 8px;
-  padding: 14px;
+  padding: 14px 16px;
   border-radius: 12px;
   background: #f7f9fc;
 }
@@ -683,11 +812,16 @@ onMounted(load);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+.asset-panel-title {
+  flex-shrink: 0;
 }
 .asset-panel-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 .hint {
   margin: 0;
@@ -702,15 +836,15 @@ onMounted(load);
   margin-bottom: 12px;
 }
 .thumb-card {
-  width: 112px;
+  width: 104px;
   background: #fff;
   border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 4px 14px #24325214;
 }
 .thumb-card img {
-  width: 112px;
-  height: 112px;
+  width: 104px;
+  height: 104px;
   object-fit: cover;
   display: block;
   background: #eef1f7;
@@ -729,6 +863,9 @@ onMounted(load);
 }
 .library-pick {
   margin-bottom: 0;
+}
+.library-select {
+  width: 100%;
 }
 .preview-box {
   display: flex;

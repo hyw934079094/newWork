@@ -12,6 +12,7 @@ export interface CharacterItem {
   race: string | null;
   occupation: string | null;
   storyName: string | null;
+  heightCm: number | null;
   publicIntro: string | null;
   internalNote: string | null;
   identityId?: number | null;
@@ -42,6 +43,7 @@ export interface CharacterFormNewCharacter {
   race?: string | null;
   occupation?: string | null;
   storyName?: string | null;
+  heightCm?: number | null;
   publicIntro?: string | null;
   internalNote?: string | null;
 }
