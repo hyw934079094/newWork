@@ -13,6 +13,7 @@ import RecycleBin from '../views/recycle/RecycleBin.vue';
 import SeriesList from '../views/series/SeriesList.vue';
 import ArcList from '../views/arcs/ArcList.vue';
 import PageList from '../views/pages/PageList.vue';
+import PageEditor from '../views/pages/PageEditor.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -26,6 +27,7 @@ const router = createRouter({
     { path: '/series', name: 'series', component: SeriesList },
     { path: '/series/:seriesId/arcs', name: 'series-arcs', component: ArcList },
     { path: '/arcs/:arcId/pages', name: 'arc-pages', component: PageList },
+    { path: '/pages/:pageId/edit', name: 'page-edit', component: PageEditor },
     { path: '/characters', name: 'characters', component: CharacterList },
     { path: '/character-identities', name: 'character-identities', component: IdentityList },
     {
