@@ -11,4 +11,5 @@ public record CharacterCreateRequest(
     String publicIntro,
     String internalNote,
     Long identityId,
-    String formLabel) {}
+    String formLabel,
+    Integer heightCm) {}

@@ -46,7 +46,7 @@ class AssetDeleteTest {
     Long assetId = persistAsset("linked-hard-delete").getId();
     CharacterProfile character =
         characterService.create(
-            new CharacterCreateRequest("引用角色", null, null, null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("引用角色", null, null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
 

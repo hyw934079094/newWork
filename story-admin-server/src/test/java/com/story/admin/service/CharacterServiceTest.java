@@ -27,6 +27,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest
 @Transactional
@@ -57,7 +58,7 @@ class CharacterServiceTest {
     CharacterProfile c =
         characterService.create(
             new CharacterCreateRequest(
-                "女怪盗", null, "女", "青年", "人类", "怪盗", "暗夜物语", "公开简介", "内部说明", null, null));
+                "女怪盗", null, "女", "青年", "人类", "怪盗", "暗夜物语", "公开简介", "内部说明", null, null, null));
     assertThat(c.getCode()).startsWith("C");
     assertThat(c.getName()).isEqualTo("女怪盗");
     assertThat(c.getStoryName()).isEqualTo("暗夜物语");
@@ -67,13 +68,13 @@ class CharacterServiceTest {
   void listFiltersByNameStoryAndGender() {
     characterService.create(
         new CharacterCreateRequest(
-            "女怪盗", "面具", "女", "青年", "人类", "怪盗", "暗夜物语", null, null, null, null));
+            "女怪盗", "面具", "女", "青年", "人类", "怪盗", "暗夜物语", null, null, null, null, null));
     characterService.create(
         new CharacterCreateRequest(
-            "剑客阿郎", null, "男", "青年", "人类", "剑客", "江湖录", null, null, null, null));
+            "剑客阿郎", null, "男", "青年", "人类", "剑客", "江湖录", null, null, null, null, null));
     characterService.create(
         new CharacterCreateRequest(
-            "精灵祭司", null, "女", "成年", "精灵", "祭司", "暗夜物语", null, null, null, null));
+            "精灵祭司", null, "女", "成年", "精灵", "祭司", "暗夜物语", null, null, null, null, null));
 
     assertThat(characterService.list(new CharacterQuery("怪盗", null, null, null, null, null, null)))
         .extracting(CharacterProfile::getName)
@@ -96,7 +97,7 @@ class CharacterServiceTest {
     CharacterProfile character =
         characterService.create(
             new CharacterCreateRequest(
-                "引用角色", null, null, null, null, null, null, null, null, null, null));
+                "引用角色", null, null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
 
@@ -114,7 +115,7 @@ class CharacterServiceTest {
     CharacterProfile original =
         characterService.create(
             new CharacterCreateRequest(
-                "女怪盗", null, "女", "青年", "人类", "怪盗", "暗夜物语", null, null, null, null));
+                "女怪盗", null, "女", "青年", "人类", "怪盗", "暗夜物语", null, null, null, null, null));
     assertThat(original.getIdentityId()).isNull();
 
     IdentityDetailResponse detail =
@@ -124,7 +125,7 @@ class CharacterServiceTest {
                 "怪盗女孩",
                 "日常",
                 new CharacterCreateRequest(
-                    "怪盗××", null, null, null, null, null, null, null, null, null, "怪盗")));
+                    "怪盗××", null, null, null, null, null, null, null, null, null, "怪盗", null)));
 
     assertThat(detail.code()).startsWith("ID-");
     assertThat(detail.name()).isEqualTo("怪盗女孩");
@@ -157,7 +158,7 @@ class CharacterServiceTest {
     CharacterProfile character =
         characterService.create(
             new CharacterCreateRequest(
-                "日常形态", null, null, null, null, null, "暗夜物语", null, null, null, null));
+                "日常形态", null, null, null, null, null, "暗夜物语", null, null, null, null, null));
     var identity =
         identityService.create(
             new CharacterIdentityUpsertRequest("怪盗女孩", "暗夜物语", null, null));
@@ -168,7 +169,7 @@ class CharacterServiceTest {
         characterService.update(
             character.getId(),
             new CharacterUpdateRequest(
-                "改名后", null, null, null, null, null, "暗夜物语", null, null, null, null));
+                "改名后", null, null, null, null, null, "暗夜物语", null, null, null, null, null));
 
     assertThat(updated.getName()).isEqualTo("改名后");
     assertThat(updated.getIdentityId()).isEqualTo(identity.id());
@@ -180,7 +181,7 @@ class CharacterServiceTest {
     CharacterProfile original =
         characterService.create(
             new CharacterCreateRequest(
-                "日常形态", null, null, null, null, null, "暗夜物语", null, null, null, null));
+                "日常形态", null, null, null, null, null, "暗夜物语", null, null, null, null, null));
     var identity =
         identityService.create(
             new CharacterIdentityUpsertRequest("怪盗女孩", "暗夜物语", null, null));
@@ -195,7 +196,7 @@ class CharacterServiceTest {
                 "应被忽略的本体名",
                 "应不改原标签",
                 new CharacterCreateRequest(
-                    "怪盗形态", null, null, null, null, null, null, null, null, null, "怪盗")));
+                    "怪盗形态", null, null, null, null, null, null, null, null, null, "怪盗", null)));
 
     assertThat(identityRepository.count()).isEqualTo(identityCountBefore);
     assertThat(detail.id()).isEqualTo(identity.id());
@@ -208,6 +209,33 @@ class CharacterServiceTest {
     CharacterProfile refreshedOriginal =
         characterProfileRepository.findById(original.getId()).orElseThrow();
     assertThat(refreshedOriginal.getFormLabel()).isEqualTo("日常");
+  }
+
+  @Test
+  void createRejectsInvalidHeightCm() {
+    assertThatThrownBy(
+            () ->
+                characterService.create(
+                    new CharacterCreateRequest(
+                        "高人", null, null, null, null, null, null, null, null, null, null, 0)))
+        .isInstanceOf(ResponseStatusException.class)
+        .hasMessageContaining("heightCm");
+  }
+
+  @Test
+  void createAndUpdateHeightCm() {
+    CharacterProfile created =
+        characterService.create(
+            new CharacterCreateRequest(
+                "测身高", null, null, null, null, null, null, null, null, null, null, 168));
+    assertThat(created.getHeightCm()).isEqualTo(168);
+
+    CharacterProfile updated =
+        characterService.update(
+            created.getId(),
+            new CharacterUpdateRequest(
+                "测身高", null, null, null, null, null, null, null, null, null, null, null));
+    assertThat(updated.getHeightCm()).isNull();
   }
 
   private Asset persistAsset(String name) {

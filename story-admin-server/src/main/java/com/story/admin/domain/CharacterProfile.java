@@ -42,6 +42,9 @@ public class CharacterProfile {
   @Column(name = "story_name", length = 200)
   private String storyName;
 
+  @Column(name = "height_cm")
+  private Integer heightCm;
+
   @Column(name = "public_intro", columnDefinition = "TEXT")
   private String publicIntro;
 
@@ -142,6 +145,14 @@ public class CharacterProfile {
 
   public void setStoryName(String storyName) {
     this.storyName = storyName;
+  }
+
+  public Integer getHeightCm() {
+    return heightCm;
+  }
+
+  public void setHeightCm(Integer heightCm) {
+    this.heightCm = heightCm;
   }
 
   public String getPublicIntro() {

@@ -47,7 +47,7 @@ class AssetListFilterTest {
     CharacterProfile character =
         characterService.create(
             new CharacterCreateRequest(
-                "筛选角色", null, null, null, null, null, null, null, null, null, null));
+                "筛选角色", null, null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         linked.getId(),
         AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
@@ -66,10 +66,10 @@ class AssetListFilterTest {
     Asset linkedB = persistAsset(category.getId(), "挂乙");
     CharacterProfile a =
         characterService.create(
-            new CharacterCreateRequest("甲", null, null, null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("甲", null, null, null, null, null, null, null, null, null, null, null));
     CharacterProfile b =
         characterService.create(
-            new CharacterCreateRequest("乙", null, null, null, null, null, null, null, null, null, null));
+            new CharacterCreateRequest("乙", null, null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         linkedA.getId(), AssetUpdateRequest.builder().characterIds(List.of(a.getId())).build());
     assetService.update(

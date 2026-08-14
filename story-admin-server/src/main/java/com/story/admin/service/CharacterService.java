@@ -90,7 +90,8 @@ public class CharacterService {
         req.occupation(),
         req.storyName(),
         req.publicIntro(),
-        req.internalNote());
+        req.internalNote(),
+        req.heightCm());
     applyIdentityFields(profile, req.identityId(), req.formLabel());
     return repo.save(profile);
   }
@@ -111,7 +112,8 @@ public class CharacterService {
         req.occupation(),
         req.storyName(),
         req.publicIntro(),
-        req.internalNote());
+        req.internalNote(),
+        req.heightCm());
     // Omitted identity fields mean leave unchanged; membership changes go via identity API / addForm.
     if (req.identityId() != null || req.formLabel() != null) {
       applyIdentityFields(profile, req.identityId(), req.formLabel());
@@ -156,7 +158,8 @@ public class CharacterService {
             nc.publicIntro(),
             nc.internalNote(),
             identityId,
-            nc.formLabel()));
+            nc.formLabel(),
+            nc.heightCm()));
 
     return identityService.get(identityId);
   }
@@ -336,7 +339,13 @@ public class CharacterService {
       String occupation,
       String storyName,
       String publicIntro,
-      String internalNote) {
+      String internalNote,
+      Integer heightCm) {
+    if (heightCm != null && (heightCm < 1 || heightCm > 300)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "heightCm must be between 1 and 300");
+    }
+    profile.setHeightCm(heightCm);
     profile.setName(name.trim());
     profile.setAlias(blankToNull(alias));
     profile.setGender(blankToNull(gender));
