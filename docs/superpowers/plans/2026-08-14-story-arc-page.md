@@ -298,8 +298,8 @@ git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "feat:
 - Create: `docs/superpowers/acceptance/2026-08-14-story-arc-page.md`（对照规格 §6 勾选）
 - Update this plan checkboxes if desired
 
-- [ ] **Step 1: 文档**
-- [ ] **Step 2: Commit** `docs: record story arc page acceptance`
+- [x] **Step 1: 文档**
+- [x] **Step 2: Commit** `docs: record story arc page acceptance`
 
 ---
 

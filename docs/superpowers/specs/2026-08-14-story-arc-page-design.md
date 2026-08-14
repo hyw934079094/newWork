@@ -1,6 +1,6 @@
 # 篇章与故事页面（首期）设计说明
 
-> 状态：已确认（待实现）  
+> 状态：已实现（首期）  
 > 日期：2026-08-14  
 > 分支策略：在 `master` 上实现  
 > 依赖：`docs/superpowers/specs/2026-08-14-story-page-beat-layout-design.md`（画面组与间距）  
