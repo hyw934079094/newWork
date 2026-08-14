@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { assetContentUrl } from '../../api/asset';
+import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
+import { listCategories, type AssetCategoryItem } from '../../api/category';
 import {
   createSeries,
   deleteSeries,
@@ -25,8 +26,13 @@ const editing = ref(false);
 const editingId = ref<number | null>(null);
 const saving = ref(false);
 
-/** Task 4: cover single-select picker dialog */
 const pickerVisible = ref(false);
+const pickerCategoryId = ref<number | 'all'>('all');
+const pickerKeyword = ref('');
+const pickerAssets = ref<AssetItem[]>([]);
+const pickerSelectedId = ref<number | null>(null);
+const pickerLoading = ref(false);
+const categories = ref<AssetCategoryItem[]>([]);
 
 const filters = reactive({
   q: '',
@@ -98,9 +104,41 @@ function clearCover() {
   form.coverAssetId = null;
 }
 
-function openCoverPicker() {
-  // Task 4: implement single-select asset picker grid
+async function openCoverPicker() {
+  pickerSelectedId.value = form.coverAssetId;
+  pickerCategoryId.value = 'all';
+  pickerKeyword.value = '';
   pickerVisible.value = true;
+  if (!categories.value.length) {
+    categories.value = await listCategories();
+  }
+  await loadPickerAssets();
+}
+
+async function loadPickerAssets() {
+  pickerLoading.value = true;
+  try {
+    pickerAssets.value = await listAssets({
+      status: 'NORMAL',
+      categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
+      q: pickerKeyword.value.trim() || undefined,
+    });
+  } finally {
+    pickerLoading.value = false;
+  }
+}
+
+function selectPickerAsset(id: number) {
+  pickerSelectedId.value = pickerSelectedId.value === id ? null : id;
+}
+
+function isPickerSelected(id: number): boolean {
+  return pickerSelectedId.value === id;
+}
+
+function confirmCoverPicker() {
+  form.coverAssetId = pickerSelectedId.value;
+  pickerVisible.value = false;
 }
 
 function payload() {
@@ -284,17 +322,67 @@ onMounted(load);
       </template>
     </el-dialog>
 
-    <!-- Task 4: fill cover picker body (category + keyword + single-select grid) -->
     <el-dialog
       v-model="pickerVisible"
       title="选择封面"
       width="760px"
       append-to-body
       destroy-on-close
+      class="asset-picker-dialog"
     >
-      <p class="hint">封面挑选将在后续任务实现。</p>
+      <div class="picker-toolbar">
+        <el-select
+          v-model="pickerCategoryId"
+          placeholder="全部分类"
+          class="picker-category"
+          @change="loadPickerAssets"
+        >
+          <el-option label="全部分类" value="all" />
+          <el-option
+            v-for="cat in categories"
+            :key="cat.id"
+            :label="cat.name"
+            :value="cat.id"
+          />
+        </el-select>
+        <el-input
+          v-model="pickerKeyword"
+          clearable
+          placeholder="关键字（显示名）"
+          class="picker-keyword"
+          @clear="loadPickerAssets"
+          @keyup.enter="loadPickerAssets"
+        />
+        <el-button type="primary" :loading="pickerLoading" @click="loadPickerAssets">
+          筛选
+        </el-button>
+      </div>
+
+      <div v-loading="pickerLoading" class="picker-grid">
+        <button
+          v-for="asset in pickerAssets"
+          :key="asset.id"
+          type="button"
+          class="picker-card"
+          :class="{ 'is-selected': isPickerSelected(asset.id) }"
+          @click="selectPickerAsset(asset.id)"
+        >
+          <img :src="assetContentUrl(asset.id)" :alt="asset.displayName" />
+          <span class="picker-card-title" :title="asset.displayName">{{ asset.displayName }}</span>
+        </button>
+        <p v-if="!pickerLoading && !pickerAssets.length" class="hint picker-empty">暂无 NORMAL 素材</p>
+      </div>
+
       <template #footer>
-        <el-button @click="pickerVisible = false">关闭</el-button>
+        <div class="picker-footer">
+          <span class="picker-count">
+            {{ pickerSelectedId != null ? '已选 1 项' : '未选择' }}
+          </span>
+          <div class="picker-footer-actions">
+            <el-button @click="pickerVisible = false">取消</el-button>
+            <el-button type="primary" @click="confirmCoverPicker">确定</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </section>
@@ -405,5 +493,85 @@ onMounted(load);
   margin: 0;
   color: #6f7e9d;
   font-size: 13px;
+}
+.picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.picker-category {
+  width: 168px;
+  flex-shrink: 0;
+}
+.picker-keyword {
+  flex: 1;
+  min-width: 160px;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 112px);
+  gap: 12px;
+  min-height: 200px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+}
+.picker-card {
+  width: 112px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px #24325214;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.picker-card:hover {
+  border-color: #a8c0f5;
+}
+.picker-card.is-selected {
+  border-color: #3a6ff0;
+  box-shadow: 0 0 0 1px #3a6ff0, 0 4px 14px #24325218;
+}
+.picker-card img {
+  width: 108px;
+  height: 108px;
+  object-fit: cover;
+  display: block;
+  background: #eef1f7;
+}
+.picker-card-title {
+  display: block;
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-empty {
+  grid-column: 1 / -1;
+  margin: 24px 0;
+  text-align: center;
+}
+.picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.picker-count {
+  color: #6f7e9d;
+  font-size: 13px;
+}
+.picker-footer-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>
