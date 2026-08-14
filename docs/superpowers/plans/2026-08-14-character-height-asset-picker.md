@@ -52,7 +52,7 @@
 - Produces: create/update 接受 `heightCm`；实体 getter/setter `getHeightCm`/`setHeightCm`
 - 校验：非 null 且 (值 < 1 或 > 300) → `400` `"heightCm must be between 1 and 300"`
 
-- [ ] **Step 1: 失败测试 — 非法身高**
+- [x] **Step 1: 失败测试 — 非法身高**
 
 在 `CharacterServiceTest` 增加：
 
@@ -71,7 +71,7 @@ void createRejectsInvalidHeightCm() {
 
 （先改 record 末尾加 `Integer heightCm`，否则编译不过；若先只加测试参数，允许与 Step 3 同批改 DTO。）
 
-- [ ] **Step 2: 失败测试 — 合法身高可落库**
+- [x] **Step 2: 失败测试 — 合法身高可落库**
 
 ```java
 @Test
@@ -91,7 +91,7 @@ void createAndUpdateHeightCm() {
 }
 ```
 
-- [ ] **Step 3: Flyway + 实体 + DTO + Service**
+- [x] **Step 3: Flyway + 实体 + DTO + Service**
 
 `V5__character_height_cm.sql`（ASCII COMMENT，避免编码坑）：
 
@@ -123,7 +123,7 @@ create/update 传入 `req.heightCm()`。同步改 `addForm` 里若调用 `applyF
 
 全仓库更新所有 `CharacterCreateRequest` / `CharacterUpdateRequest` 构造调用（末尾多一个实参）。
 
-- [ ] **Step 4: 跑测 PASS**
+- [x] **Step 4: 跑测 PASS**
 
 ```bash
 cd d:\study\mine\newWork\story-admin-server
@@ -133,7 +133,7 @@ mvn -q -Dtest=CharacterServiceTest test
 
 Expected: BUILD SUCCESS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat: add character heightCm in centimeters"
@@ -151,7 +151,7 @@ git commit -m "feat: add character heightCm in centimeters"
 - Consumes: `characterRelRepository.findAssetIdsByCharacterId`、`assetRepository.findAllById`、`deleteByCharacterId`
 - Produces: 仅 NORMAL → 409；否则清 rel + 删人
 
-- [ ] **Step 1: 失败测试（期望新行为 GREEN 前先写 RED）— 仅 DELETED 应可删**
+- [x] **Step 1: 失败测试（期望新行为 GREEN 前先写 RED）— 仅 DELETED 应可删**
 
 ```java
 @Test
@@ -173,11 +173,11 @@ void deleteSucceedsWhenOnlyLinkedDeletedAssets() {
 
 （沿用测试类已有 `persistAsset` / `assetService`；若无 recycle 助手则用现有 `AssetService.recycle`。）
 
-- [ ] **Step 2: 确认原测试 `deleteBlockedWhenLinkedToAsset` 仍 409**
+- [x] **Step 2: 确认原测试 `deleteBlockedWhenLinkedToAsset` 仍 409**
 
 保持用例不变（NORMAL 关联）。
 
-- [ ] **Step 3: 实现 delete**
+- [x] **Step 3: 实现 delete**
 
 ```java
 @Transactional
@@ -207,7 +207,7 @@ public void delete(Long id) {
 void deleteByCharacterId(Long characterId);
 ```
 
-- [ ] **Step 4: 跑测 PASS + Commit**
+- [x] **Step 4: 跑测 PASS + Commit**
 
 ```bash
 mvn -q -Dtest=CharacterServiceTest test
@@ -226,29 +226,29 @@ git commit -m "fix: allow deleting character with only recycled asset links"
 - Consumes: API `heightCm`
 - Produces: 表单可编辑；列表展示 `{n} cm` / `-`；筛选区/表格操作/编辑弹窗两列布局（Spec §6）
 
-- [ ] **Step 1: 类型**
+- [x] **Step 1: 类型**
 
 `CharacterItem` / `CharacterPayload` / `CharacterFormNewCharacter` 增加 `heightCm: number | null`（create payload 允许 null）。
 
-- [ ] **Step 2: 身高字段接入**
+- [x] **Step 2: 身高字段接入**
 
 - `form` / `resetForm` / `openEdit` / `payload()` 带上 `heightCm`
 - 编辑表单项：`el-input-number`（可清空），label「身高 (cm)」
 - `el-table-column`：有值 → `` `${row.heightCm} cm` ``，否则 `-`
 
-- [ ] **Step 3: 列表页排版**
+- [x] **Step 3: 列表页排版**
 
 - 筛选：CSS 网格/flex，统一 `el-form-item` 间距与控件最小宽度，避免一字换行；查询/重置成组
 - 表格操作：保留「预览」「编辑」为 link/主操作；「添加形态」「删除」收入 `el-dropdown`「更多」
 - 表头区保持简洁，不堆叠多余装饰
 
-- [ ] **Step 4: 编辑弹窗布局**
+- [x] **Step 4: 编辑弹窗布局**
 
 - `width` ≈ `840px`
 - 基础字段两列：姓名|别名、所属故事|身高、性别|年龄/阶段、种族|身份/职业；公开简介/内部说明整行
 - 素材区：分区标题 + 已关联缩略图固定边长、标题 `ellipsis`；按钮组「上传预览图」「从素材库指定」「保存关联」同行不挤
 
-- [ ] **Step 5: build + Commit**
+- [x] **Step 5: build + Commit**
 
 ```bash
 cd d:\study\mine\newWork\story-admin-web
@@ -272,11 +272,11 @@ Expected: `vue-tsc -b && vite build` PASS
 - Consumes: `listAssets({ status:'NORMAL', categoryId?, q? })`、`listCategories()`
 - Produces: 二级弹窗多选；确定写回 `selectedLibraryIds`；仍点「保存关联」提交
 
-- [ ] **Step 1: 去掉文字 `el-select` library-pick**
+- [x] **Step 1: 去掉文字 `el-select` library-pick**
 
 删除「从素材库指定」的 `el-select` 块，改为打开挑选弹窗的按钮。
 
-- [ ] **Step 2: 挑选弹窗状态**
+- [x] **Step 2: 挑选弹窗状态**
 
 ```ts
 const pickerVisible = ref(false);
@@ -288,7 +288,7 @@ const pickerLoading = ref(false);
 const categories = ref<AssetCategoryItem[]>([]);
 ```
 
-- [ ] **Step 3: 打开/加载/确定 + 网格样式**
+- [x] **Step 3: 打开/加载/确定 + 网格样式**
 
 ```ts
 async function openAssetPicker() {
@@ -325,7 +325,7 @@ function confirmAssetPicker() {
 - 网格：固定卡片宽高；选中描边/高亮；标题单行省略  
 - 底栏：已选数量 + 取消/确定  
 
-- [ ] **Step 4: build + Commit**
+- [x] **Step 4: build + Commit**
 
 ```bash
 npm run build
@@ -341,7 +341,7 @@ git commit -m "feat: character asset picker dialog with category keyword thumbs"
 - Modify: `README.md` — 一句：人物身高 + 挑选弹窗 + 人物页排版首期
 - Modify: 本计划文末追加验收表；勾选 Tasks
 
-- [ ] **Step 1: 后端验收**
+- [x] **Step 1: 后端验收**
 
 ```bash
 mvn -q -Dtest=CharacterServiceTest test
@@ -349,11 +349,11 @@ mvn -q -Dtest=CharacterServiceTest test
 
 对照 Spec §7：身高合法/非法；删仅 DELETED；NORMAL 仍 409。
 
-- [ ] **Step 2: 前端**
+- [x] **Step 2: 前端**
 
 `npm run build` PASS；浏览器点验标 PARTIAL 可接受（分类/关键字/缩略图/保存关联；筛选与弹窗无明显一字换行）。
 
-- [ ] **Step 3: 文档 + Commit**
+- [x] **Step 3: 文档 + Commit**
 
 ```bash
 git commit -m "docs: record character height and asset picker acceptance"
@@ -378,3 +378,25 @@ git commit -m "docs: record character height and asset picker acceptance"
 - 重启后端后 Flyway V5 才会打到 MySQL；前端 Vite 热更新即可
 - 勿提交 `pic/`；`storage/` 变更另议
 - 其它管理页美化不在本计划；完成后可另开「工作台美化」计划
+
+---
+
+## Task 5 验收表（Spec §7）
+
+| # | Criterion | Result | Evidence |
+|---|-----------|--------|----------|
+| 1 | 可保存/展示人物身高（含空）；非法值拒绝 | **PASS** | CharacterServiceTest#createAndUpdateHeightCm / #createRejectsInvalidHeightCm；UI 表单+列表列（Task 3） |
+| 2 | 分类+关键字筛选+缩略图多选；确定后「保存关联」写库 | **PASS** (UI browser **PARTIAL**) | Task 4 picker 接线；
+pm run build PASS；浏览器点验未跑 |
+| 3 | 仅幽灵 DELETED 关联可删人物 | **PASS** | CharacterServiceTest#deleteSucceedsWhenOnlyLinkedDeletedAssets |
+| 4 | NORMAL 关联删除仍 409 | **PASS** | CharacterServiceTest#deleteBlockedWhenLinkedToAsset |
+| 5 | 人物页筛选/表格/编辑/挑选弹窗无明显一字换行 | **PARTIAL OK** | Task 3/4 布局已落地；浏览器点验未跑 |
+
+| Extra | Result | Evidence |
+|-------|--------|----------|
+| Backend re-test (Task 5) | **PASS** | mvn -Dtest=CharacterServiceTest test EXIT=0；Tests run: 9, Failures: 0 (JDK 24.0.1) |
+| Frontend build | **PASS** | Task 3/4 
+pm run build |
+| UI browser | **PARTIAL OK** | 按 brief 可接受 |
+
+**Tasks 1–5 steps:** 全部勾选完成。

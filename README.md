@@ -7,6 +7,7 @@
 - [管理端素材组合编排设计](docs/superpowers/specs/2026-08-13-asset-combo-design.md)：组合成员/播放序列/步进停留与预览（状态：已实现（首期））。
 - [管理端人物本体与多形态设计](docs/superpowers/specs/2026-08-13-character-identity-design.md)：人物本体、形态映射、共用素材与「添加形态」（状态：已实现（首期））。
 - [管理端素材工作台筛选与替换设计](docs/superpowers/specs/2026-08-13-asset-workbench-filter-replace-design.md)：工作台默认「无关联」人物筛选 + 单张替换图片（状态：已实现（首期））。
+- [人物身高与素材挑选优化](docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md)：人物可选身高（cm）+ 分类/关键字缩略图挑选弹窗 + 人物管理页排版首期美化（状态：已实现（首期））。
 
 本仓库采用四项目单仓库结构：
 
