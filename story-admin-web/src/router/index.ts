@@ -10,6 +10,7 @@ import ComboList from '../views/combos/ComboList.vue';
 import ComboEditor from '../views/combos/ComboEditor.vue';
 import AiReference from '../views/ai/AiReference.vue';
 import RecycleBin from '../views/recycle/RecycleBin.vue';
+import SeriesList from '../views/series/SeriesList.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ const router = createRouter({
     { path: '/assets/combos', name: 'asset-combos', component: ComboList },
     { path: '/assets/combos/:id', name: 'asset-combo-edit', component: ComboEditor },
     { path: '/ai-reference', name: 'ai-reference', component: AiReference },
+    { path: '/series', name: 'series', component: SeriesList },
     { path: '/characters', name: 'characters', component: CharacterList },
     { path: '/character-identities', name: 'character-identities', component: IdentityList },
     {

@@ -22,6 +22,7 @@
           </div>
         </div>
         <RouterLink to="/ai-reference">AI 参考区</RouterLink>
+        <RouterLink to="/series">故事系列</RouterLink>
         <div class="nav-group">
           <div class="nav-group-title">人物管理</div>
           <div class="nav-children">
