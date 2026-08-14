@@ -8,6 +8,7 @@ import com.story.admin.dto.SeriesCreateRequest;
 import com.story.admin.dto.SeriesQuery;
 import com.story.admin.dto.SeriesUpdateRequest;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.StoryArcRepository;
 import com.story.admin.repository.StorySeriesRepository;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
@@ -25,10 +26,15 @@ public class SeriesService {
 
   private final StorySeriesRepository repo;
   private final AssetRepository assetRepository;
+  private final StoryArcRepository arcRepository;
 
-  public SeriesService(StorySeriesRepository repo, AssetRepository assetRepository) {
+  public SeriesService(
+      StorySeriesRepository repo,
+      AssetRepository assetRepository,
+      StoryArcRepository arcRepository) {
     this.repo = repo;
     this.assetRepository = assetRepository;
+    this.arcRepository = arcRepository;
   }
 
   public List<StorySeries> list(SeriesQuery query) {
@@ -69,6 +75,9 @@ public class SeriesService {
   public void delete(Long id) {
     if (!repo.existsById(id)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "series not found: " + id);
+    }
+    if (arcRepository.countBySeriesId(id) > 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "series still has arcs: " + id);
     }
     repo.deleteById(id);
   }
