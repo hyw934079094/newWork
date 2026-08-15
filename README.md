@@ -6,7 +6,7 @@
 - [管理端素材模块设计](docs/superpowers/specs/2026-08-13-asset-module-design.md)：标准首期素材能力设计（状态：已实现）。
 - [管理端素材组合编排设计](docs/superpowers/specs/2026-08-13-asset-combo-design.md)：组合成员/播放序列/步进停留与预览（状态：已实现（首期））。
 - [管理端人物本体与多形态设计](docs/superpowers/specs/2026-08-13-character-identity-design.md)：人物本体、形态映射、共用素材与「添加形态」（状态：已实现（首期））。
-- [管理端素材工作台筛选与替换设计](docs/superpowers/specs/2026-08-13-asset-workbench-filter-replace-design.md)：工作台默认「无关联」人物筛选 + 单张替换图片（状态：已实现（首期））。
+- [管理端素材工作台筛选与替换设计](docs/superpowers/specs/2026-08-13-asset-workbench-filter-replace-design.md)：工作台人物筛选（默认「全部」；「无关联」= 人物/系列/篇章均无）+ 单张替换图片（状态：已实现（首期））。
 - [篇章与故事页面（首期）](docs/superpowers/specs/2026-08-14-story-arc-page-design.md) · [实现计划](docs/superpowers/plans/2026-08-14-story-arc-page.md) · [验收记录](docs/superpowers/acceptance/2026-08-14-story-arc-page.md)：系列→篇章→页面 + content_json/画面组编辑器（状态：已实现（首期））。
 - [故事页面画面组与图文间距](docs/superpowers/specs/2026-08-14-story-page-beat-layout-design.md)：竖滚阅读 + 画面组（一图多文）间距档位（状态：已实现（首期），随篇章/页面模块落地）。
 - [人物身高与素材挑选优化](docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md)：人物可选身高（cm）+ 分类/关键字缩略图挑选弹窗 + 人物管理页排版首期美化（状态：已实现（首期））。
@@ -62,7 +62,7 @@
 7. **管理端登录**：浏览器打开 `http://localhost:5174/login`，默认账号 **`admin` / `admin`**（启动时幂等种子；Session 约 8 小时）。侧栏可改密/退出。除健康检查与登录接口外，`/api/**` 需登录（401）。
 8. **组合编排入口**：侧栏「素材管理 → 组合编排」，路由 `/assets/combos`（编辑 `/assets/combos/:id`）；API 前缀 `/api/combos`。
 9. **人物本体入口**：侧栏「人物管理 → 人物本体」，路由 `/character-identities`（编辑 `/character-identities/:id`）；人物列表 `/characters` 含所属本体列与「添加形态」；API 前缀 `/api/character-identities`，升级流 `POST /api/characters/{id}/forms`。
-10. **素材工作台筛选与替换**：路由 `/assets`；默认人物筛选「无关联」（`characterFilter=unlinked`）；详情「替换图片」覆盖原文件（`POST /api/assets/{id}/content`），素材 id / 分类 / 关联不变。
+10. **素材工作台筛选与替换**：路由 `/assets`；默认人物筛选「全部」（`characterFilter=all`）；「无关联」表示人物/系列/篇章均无关联；详情「替换图片」覆盖原文件（`POST /api/assets/{id}/content`），素材 id / 分类 / 关联不变。
 
 ### 使用端 / 双端一并启动
 

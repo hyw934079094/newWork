@@ -44,8 +44,8 @@ const search = ref('');
 const linkTypeFilter = ref<LinkTypeFilter>('');
 const filterSeriesId = ref<number | ''>('');
 const filterArcId = ref<number | ''>('');
-/** 无关联 | 具体人物 id | 全部 */
-const characterFilter = ref<'unlinked' | 'all' | number>('unlinked');
+/** 无关联 | 具体人物 id | 全部（默认全部） */
+const characterFilter = ref<'unlinked' | 'all' | number>('all');
 const indexInput = ref('1');
 const fileInput = ref<HTMLInputElement | null>(null);
 const categoryBuckets = reactive<Record<number, AssetItem[]>>({});
@@ -314,11 +314,7 @@ async function loadAssets(keepId?: number | null) {
     if (showCharacterFilter.value) {
       if (typeof characterFilter.value === 'number') {
         listParams.characterId = characterFilter.value;
-      } else if (linkTypeFilter.value === 'CHARACTER') {
-        if (characterFilter.value !== 'unlinked') {
-          listParams.characterFilter = 'all';
-        }
-      } else {
+      } else if (characterFilter.value === 'unlinked' || characterFilter.value === 'all') {
         listParams.characterFilter = characterFilter.value;
       }
     }
@@ -698,7 +694,7 @@ onMounted(async () => {
         >
           <el-option
             v-if="linkTypeFilter === ''"
-            label="无关联"
+            label="无关联（人物/系列/篇章均无）"
             value="unlinked"
           />
           <el-option

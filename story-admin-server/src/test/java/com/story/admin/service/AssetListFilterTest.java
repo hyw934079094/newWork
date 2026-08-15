@@ -5,9 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
+import com.story.admin.domain.AssetLinkType;
 import com.story.admin.domain.CharacterProfile;
+import com.story.admin.domain.StoryArc;
+import com.story.admin.domain.StorySeries;
+import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
+import com.story.admin.dto.SeriesCreateRequest;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
 import java.util.List;
@@ -36,6 +41,8 @@ class AssetListFilterTest {
 
   @Autowired AssetService assetService;
   @Autowired CharacterService characterService;
+  @Autowired SeriesService seriesService;
+  @Autowired ArcService arcService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
 
@@ -50,12 +57,46 @@ class AssetListFilterTest {
                 "筛选角色", null, null, null, null, null, null, null, null, null, null, null));
     assetService.update(
         linked.getId(),
-        AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
+        AssetUpdateRequest.builder()
+            .linkType(AssetLinkType.CHARACTER)
+            .characterIds(List.of(character.getId()))
+            .build());
 
     List<Asset> result =
         assetService.list(category.getId(), "NORMAL", null, "unlinked", null);
 
     assertThat(result).extracting(Asset::getId).containsExactly(unlinked.getId());
+  }
+
+  @Test
+  void listUnlinkedExcludesSeriesAndArcLinkedAssets() {
+    AssetCategory category = persistCategory("filter-unlinked-any", "筛选全无关联");
+    Asset bare = persistAsset(category.getId(), "全无关联");
+    Asset seriesLinked = persistAsset(category.getId(), "挂系列");
+    Asset arcLinked = persistAsset(category.getId(), "挂篇章");
+
+    StorySeries series =
+        seriesService.create(new SeriesCreateRequest("无关联测系列", null, null, null, null));
+    StoryArc arc =
+        arcService.create(series.getId(), new ArcCreateRequest("无关联测篇章", null, null, null));
+
+    assetService.update(
+        seriesLinked.getId(),
+        AssetUpdateRequest.builder()
+            .linkType(AssetLinkType.SERIES)
+            .seriesIds(List.of(series.getId()))
+            .build());
+    assetService.update(
+        arcLinked.getId(),
+        AssetUpdateRequest.builder()
+            .linkType(AssetLinkType.ARC)
+            .arcIds(List.of(arc.getId()))
+            .build());
+
+    List<Asset> result =
+        assetService.list(category.getId(), "NORMAL", null, "unlinked", null);
+
+    assertThat(result).extracting(Asset::getId).containsExactly(bare.getId());
   }
 
   @Test

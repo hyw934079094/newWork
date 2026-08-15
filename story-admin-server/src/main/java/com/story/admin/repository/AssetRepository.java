@@ -59,7 +59,11 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
                      where r.assetId = a.id and r.characterId = :characterId))
                  or (:characterId is null and :characterFilter = 'unlinked'
                    and not exists (
-                     select 1 from AssetCharacterRel r where r.assetId = a.id))
+                     select 1 from AssetCharacterRel r where r.assetId = a.id)
+                   and not exists (
+                     select 1 from AssetSeriesRel sr where sr.assetId = a.id)
+                   and not exists (
+                     select 1 from AssetArcRel ar where ar.assetId = a.id))
                  or (:characterId is null and :characterFilter = 'all'
                    and exists (select 1 from AssetCharacterRel r where r.assetId = a.id))
                )
@@ -74,7 +78,11 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
                    where r.assetId = a.id and r.characterId = :characterId))
                or (:characterId is null and :characterFilter = 'unlinked'
                  and not exists (
-                   select 1 from AssetCharacterRel r where r.assetId = a.id))
+                   select 1 from AssetCharacterRel r where r.assetId = a.id)
+                 and not exists (
+                   select 1 from AssetSeriesRel sr where sr.assetId = a.id)
+                 and not exists (
+                   select 1 from AssetArcRel ar where ar.assetId = a.id))
                or (:characterId is null and :characterFilter = 'all')
              )
             )
