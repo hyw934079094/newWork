@@ -12,6 +12,7 @@
 - [人物身高与素材挑选优化](docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md)：人物可选身高（cm）+ 分类/关键字缩略图挑选弹窗 + 人物管理页排版首期美化（状态：已实现（首期））。
 - [素材关联系列/篇章/人物](docs/superpowers/specs/2026-08-15-asset-link-series-arc-design.md)：三类互斥多选关联 + 工作台筛选· [实现计划](docs/superpowers/plans/2026-08-15-asset-link-series-arc.md) · [验收](docs/superpowers/acceptance/2026-08-15-asset-link-series-arc.md)（状态：已实现（首期））。
 - [素材工作台筛选作用域独立排序](docs/superpowers/specs/2026-08-15-asset-scope-sort-design.md)：人物/系列/篇章/无关联各自持久化顺序，关键字临时拖 · [验收](docs/superpowers/acceptance/2026-08-15-asset-scope-sort.md)（状态：已实现（首期））。
+- [篇章整篇预览与 AI 阅读流](docs/superpowers/specs/2026-08-15-arc-reading-preview-design.md) · [实现计划](docs/superpowers/plans/2026-08-15-arc-reading-preview.md) · [验收](docs/superpowers/acceptance/2026-08-15-arc-reading-preview.md)（状态：已实现（首期））。
 - [故事系列管理（首期）](docs/superpowers/specs/2026-08-14-story-series-design.md)：系列 CRUD、状态/简介/标签、素材库封面单选与硬删封面 409（状态：已实现（首期））。
 - 管理端基础登录：Session + 种子 `admin/admin`；验收见 [acceptance](docs/superpowers/acceptance/2026-08-14-admin-login.md)。
 
@@ -106,3 +107,4 @@ npm run dev
 - 管理端（素材首期）：分类/素材上传与预览、拖拽排序与跨分类、标签与人物关联、回收站、AI 参考区（无真模型）、系统配置 CRUD + 默认回退、人物基础 CRUD。
 - 管理端（组合编排首期）：组合 CRUD、成员 1..n、播放序列/默认间隔/步进停留、循环预览、素材硬删组合引用拦截（409）。
 - 管理端（人物本体首期）：本体 CRUD、形态 members 全量设置、本体共用素材、人物 `identityId`/`formLabel`、添加形态自动建本体、删本体/硬删素材引用拦截（409）。
+- 管理端（篇章整篇预览首期）：路由 `/arcs/:arcId/preview` 连续竖滚阅读；`GET /api/arcs/{id}/reading-stream` 结构化 segments；预览页「AI 阅读流」弹窗复制 URL。
