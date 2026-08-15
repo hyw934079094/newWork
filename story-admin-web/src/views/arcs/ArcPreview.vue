@@ -7,6 +7,7 @@ import { arcReadingStreamUrl, getArc, type ArcItem } from '../../api/arc';
 import { listPages, type PageItem } from '../../api/page';
 import { getSeries } from '../../api/series';
 import PagePreview, { type PagePreviewItem } from '../pages/PagePreview.vue';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -117,10 +118,6 @@ async function copyReadingStreamUrl() {
 function openCoverLightbox() {
   if (arc.value?.coverAssetId == null) return;
   coverLightboxVisible.value = true;
-}
-
-function closeCoverLightbox() {
-  coverLightboxVisible.value = false;
 }
 
 function goBack() {
@@ -238,22 +235,11 @@ onMounted(() => {
       </template>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="coverLightboxVisible && arc?.coverAssetId != null"
-        class="cover-lightbox"
-        role="dialog"
-        aria-modal="true"
-        @click="closeCoverLightbox"
-      >
-        <img
-          class="cover-lightbox-img"
-          :src="assetContentUrl(arc.coverAssetId)"
-          :alt="arc.title"
-          @click.stop
-        />
-      </div>
-    </Teleport>
+    <ImageLightbox
+      v-model="coverLightboxVisible"
+      :src="arc?.coverAssetId != null ? assetContentUrl(arc.coverAssetId) : null"
+      :alt="arc?.title"
+    />
   </section>
 </template>
 
@@ -314,26 +300,6 @@ onMounted(() => {
   background: #eef1f7;
   object-fit: cover;
   max-height: 360px;
-}
-.cover-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background: rgba(12, 18, 32, 0.72);
-  cursor: zoom-out;
-}
-.cover-lightbox-img {
-  max-width: min(860px, 92vw);
-  max-height: 88vh;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  background: #111827;
-  cursor: default;
 }
 .arc-title {
   margin: 0 0 12px;

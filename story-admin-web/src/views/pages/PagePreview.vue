@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { assetContentUrl } from '../../api/asset';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 export type PagePreviewChild = {
   type: string;
@@ -18,17 +19,18 @@ defineProps<{
   items: PagePreviewItem[];
 }>();
 
+const lightboxVisible = ref(false);
 const lightboxAssetId = ref<number | null>(null);
 const lightboxAlt = ref('');
+
+const lightboxSrc = computed(() =>
+  lightboxAssetId.value != null ? assetContentUrl(lightboxAssetId.value) : null,
+);
 
 function openLightbox(assetId: number, alt?: string) {
   lightboxAssetId.value = assetId;
   lightboxAlt.value = alt ?? '';
-}
-
-function closeLightbox() {
-  lightboxAssetId.value = null;
-  lightboxAlt.value = '';
+  lightboxVisible.value = true;
 }
 
 function childClass(type: string): string {
@@ -69,22 +71,7 @@ function childClass(type: string): string {
       <p v-else class="block-body">{{ item.text }}</p>
     </template>
 
-    <Teleport to="body">
-      <div
-        v-if="lightboxAssetId != null"
-        class="preview-lightbox"
-        role="dialog"
-        aria-modal="true"
-        @click="closeLightbox"
-      >
-        <img
-          class="preview-lightbox-img"
-          :src="assetContentUrl(lightboxAssetId)"
-          :alt="lightboxAlt"
-          @click.stop
-        />
-      </div>
-    </Teleport>
+    <ImageLightbox v-model="lightboxVisible" :src="lightboxSrc" :alt="lightboxAlt" />
   </div>
 </template>
 
@@ -168,25 +155,5 @@ function childClass(type: string): string {
   padding-left: 12px;
   border-left: 3px solid #c5d0e6;
   color: #33415f;
-}
-.preview-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background: rgba(12, 18, 32, 0.72);
-  cursor: zoom-out;
-}
-.preview-lightbox-img {
-  max-width: min(860px, 92vw);
-  max-height: 88vh;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  background: #111827;
-  cursor: default;
 }
 </style>

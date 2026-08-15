@@ -22,6 +22,7 @@ import { listCategories, type AssetCategoryItem } from '../../api/category';
 import { listCharacters, type CharacterItem } from '../../api/character';
 import { listSeries, type SeriesItem } from '../../api/series';
 import { getArc, listArcs, type ArcItem } from '../../api/arc';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 type LinkTypeFilter = '' | AssetLinkType;
 
@@ -467,8 +468,14 @@ watch(currentAsset, () => {
 
 watch(selectedAssetId, async () => {
   await nextTick();
+  const scroller = thumbsScroller.value;
   const el = document.querySelector<HTMLElement>(`[data-thumb-id="${selectedAssetId.value}"]`);
-  el?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  if (!scroller || !el) return;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const delta =
+    elRect.left + elRect.width / 2 - (scrollerRect.left + scrollerRect.width / 2);
+  scroller.scrollLeft += delta;
 });
 
 async function selectCategory(id: number) {
@@ -619,10 +626,6 @@ async function confirmBatchLink() {
 function openLightbox() {
   if (!currentAsset.value) return;
   lightboxVisible.value = true;
-}
-
-function closeLightbox() {
-  lightboxVisible.value = false;
 }
 
 function goPrev() {
@@ -1255,22 +1258,11 @@ onUnmounted(() => {
     </template>
   </el-dialog>
 
-  <Teleport to="body">
-    <div
-      v-if="lightboxVisible && currentAsset"
-      class="asset-lightbox"
-      role="dialog"
-      aria-modal="true"
-      @click="closeLightbox"
-    >
-      <img
-        class="asset-lightbox-img"
-        :src="assetContentUrl(currentAsset.id, previewBust || undefined)"
-        :alt="currentAsset.displayName"
-        @click.stop
-      />
-    </div>
-  </Teleport>
+  <ImageLightbox
+    v-model="lightboxVisible"
+    :src="currentAsset ? assetContentUrl(currentAsset.id, previewBust || undefined) : null"
+    :alt="currentAsset?.displayName"
+  />
 </template>
 
 <style scoped>
@@ -1439,26 +1431,6 @@ onUnmounted(() => {
   background: #f4f6fa;
   border-radius: 12px;
   display: block;
-}
-.asset-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background: rgba(12, 18, 32, 0.72);
-  cursor: zoom-out;
-}
-.asset-lightbox-img {
-  max-width: min(960px, 92vw);
-  max-height: 88vh;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  background: #111827;
-  cursor: default;
 }
 .preview-meta {
   display: flex;

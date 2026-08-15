@@ -16,6 +16,7 @@ import {
 } from '../../api/character';
 import { listIdentities } from '../../api/characterIdentity';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const router = useRouter();
 const loading = ref(false);
@@ -87,6 +88,9 @@ const form = reactive({
 });
 
 const previewAsset = computed(() => previewAssets.value[previewIndex.value] ?? null);
+const previewSrc = computed(() =>
+  previewAsset.value ? assetContentUrl(previewAsset.value.id) : null,
+);
 const canManageAssets = computed(() => editingId.value != null);
 const formHasIdentity = computed(() => formSource.value?.identityId != null);
 
@@ -793,25 +797,18 @@ onMounted(load);
       </template>
     </el-dialog>
 
-    <el-dialog
+    <ImageLightbox
       v-model="previewVisible"
-      :title="`预览 · ${previewTitle}`"
-      width="640px"
-      align-center
-      destroy-on-close
+      :src="previewSrc"
+      :alt="previewAsset?.displayName"
     >
-      <div v-if="previewAsset" class="preview-box">
-        <img :src="assetContentUrl(previewAsset.id)" :alt="previewAsset.displayName" />
-        <div class="preview-caption">
-          <span>{{ previewAsset.displayName }}</span>
-          <span>{{ previewIndex + 1 }} / {{ previewAssets.length }}</span>
-        </div>
-        <div class="preview-nav">
-          <el-button @click="previewPrev">上一张</el-button>
-          <el-button type="primary" @click="previewNext">下一张</el-button>
-        </div>
-      </div>
-    </el-dialog>
+      <template #chrome>
+        <span>{{ previewTitle }} · {{ previewAsset?.displayName }}</span>
+        <span>{{ previewIndex + 1 }} / {{ previewAssets.length }}</span>
+        <el-button size="small" @click="previewPrev">上一张</el-button>
+        <el-button size="small" type="primary" @click="previewNext">下一张</el-button>
+      </template>
+    </ImageLightbox>
 
     <el-dialog
       v-model="formDialogVisible"
@@ -1084,28 +1081,6 @@ onMounted(load);
 .picker-footer-actions {
   display: flex;
   gap: 8px;
-}
-.preview-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.preview-box img {
-  max-width: 100%;
-  max-height: 420px;
-  object-fit: contain;
-  border-radius: 12px;
-  background: #f4f6fa;
-}
-.preview-caption {
-  display: flex;
-  gap: 16px;
-  color: #6f7e9d;
-}
-.preview-nav {
-  display: flex;
-  gap: 10px;
 }
 .identity-link {
   color: #3a6ff0;

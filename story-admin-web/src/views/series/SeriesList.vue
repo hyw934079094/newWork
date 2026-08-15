@@ -12,6 +12,7 @@ import {
   type SeriesItem,
   type SeriesStatus,
 } from '../../api/series';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const router = useRouter();
 
@@ -45,12 +46,6 @@ function openCoverPreview(assetId: number, alt?: string) {
   previewAssetId.value = assetId;
   previewAlt.value = alt ?? '';
   previewVisible.value = true;
-}
-
-function closeCoverPreview() {
-  previewVisible.value = false;
-  previewAssetId.value = null;
-  previewAlt.value = '';
 }
 
 const filters = reactive({
@@ -424,22 +419,11 @@ onMounted(load);
       </template>
     </el-dialog>
 
-    <Teleport to="body">
-      <div
-        v-if="previewVisible && previewAssetId != null"
-        class="cover-lightbox"
-        role="dialog"
-        aria-modal="true"
-        @click="closeCoverPreview"
-      >
-        <img
-          class="cover-lightbox-img"
-          :src="assetContentUrl(previewAssetId)"
-          :alt="previewAlt"
-          @click.stop
-        />
-      </div>
-    </Teleport>
+    <ImageLightbox
+      v-model="previewVisible"
+      :src="previewAssetId != null ? assetContentUrl(previewAssetId) : null"
+      :alt="previewAlt"
+    />
   </section>
 </template>
 
@@ -514,26 +498,6 @@ onMounted(load);
   border-radius: 8px;
   background: #eef1f7;
   display: block;
-}
-.cover-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 4000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background: rgba(12, 18, 32, 0.72);
-  cursor: zoom-out;
-}
-.cover-lightbox-img {
-  max-width: min(860px, 92vw);
-  max-height: 88vh;
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  background: #111827;
-  cursor: default;
 }
 .cover-placeholder {
   color: #9aa6bf;
