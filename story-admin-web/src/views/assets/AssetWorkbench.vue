@@ -132,7 +132,8 @@ function tickThumbAutoScroll() {
 
 function startThumbAutoScroll() {
   document.addEventListener('dragover', onThumbPointerMove);
-  document.addEventListener('pointermove', onThumbPointerMove);
+  // fallback 拖拽走 mousemove；不要抢 pointermove，以免干扰 Sortable
+  document.addEventListener('mousemove', onThumbPointerMove);
   if (!thumbAutoScrollRaf) {
     thumbAutoScrollRaf = requestAnimationFrame(tickThumbAutoScroll);
   }
@@ -140,7 +141,7 @@ function startThumbAutoScroll() {
 
 function stopThumbAutoScroll() {
   document.removeEventListener('dragover', onThumbPointerMove);
-  document.removeEventListener('pointermove', onThumbPointerMove);
+  document.removeEventListener('mousemove', onThumbPointerMove);
   if (thumbAutoScrollRaf) {
     cancelAnimationFrame(thumbAutoScrollRaf);
     thumbAutoScrollRaf = 0;
@@ -169,22 +170,34 @@ async function onThumbsChange(evt: DragChangeEvent) {
   const scope = persistSortScope.value;
   if (scope === 'none') {
     restoreDragSnapshot();
+    ElMessage.warning('当前筛选未选具体目标，无法保存排序');
     return;
   }
-  await nextTick();
+  // 用拖拽事件里的新旧下标，避免 v-model 尚未同步时读到旧顺序
+  const fromSnapshot = dragSnapshot.map((item) => item.id);
+  const orderedIds = assets.value.map((item) => item.id);
+  const ids =
+    orderedIds.length === fromSnapshot.length &&
+    orderedIds.every((id) => fromSnapshot.includes(id))
+      ? orderedIds
+      : (() => {
+          const next = [...fromSnapshot];
+          const [movedId] = next.splice(evt.moved!.oldIndex, 1);
+          next.splice(evt.moved!.newIndex, 0, movedId);
+          return next;
+        })();
   try {
-    const orderedIds = assets.value.map((item) => item.id);
     if (scope == null) {
       await reorderAssets({
         categoryId: selectedCategoryId.value,
-        orderedIds,
+        orderedIds: ids,
       });
     } else {
       await reorderAssetsByScope({
         categoryId: selectedCategoryId.value,
         scope: scope.scope,
-        scopeId: scope.scopeId,
-        orderedIds,
+        scopeId: scope.scopeId != null ? Number(scope.scopeId) : null,
+        orderedIds: ids,
       });
     }
     await loadAssets(selectedAssetId.value);
@@ -997,10 +1010,14 @@ onUnmounted(() => {
             :group="thumbGroup"
             :sort="canSortThumbs"
             :animation="150"
+            :force-fallback="true"
+            :fallback-on-body="true"
             :scroll="true"
-            :force-auto-scroll-fallback="true"
+            :bubble-scroll="true"
             :scroll-sensitivity="56"
             :scroll-speed="8"
+            filter=".thumb-check"
+            :prevent-on-filter="true"
             class="thumbs-track"
             ghost-class="thumb-ghost"
             @start="onDragStart"
@@ -1482,6 +1499,11 @@ onUnmounted(() => {
   width: max-content;
   min-width: 100%;
   min-height: 72px;
+  /* 给 Sortable fallback 拖拽层足够命中区域 */
+  padding: 2px 0;
+}
+.thumbs-track :deep(.sortable-fallback) {
+  opacity: 0.92;
 }
 .thumb {
   position: relative;
