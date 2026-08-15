@@ -1,8 +1,8 @@
 # Task 3 Report: AI reading-stream URL dialog on ArcPreview
 
 **Status:** DONE  
-**Commit:** (pending push) — `feat: add AI reading-stream URL dialog on arc preview`  
-**Branch:** `master`
+**Commit:** `a56d2d1` — `feat: add AI reading-stream URL dialog on arc preview`  
+**Pushed:** `origin/master`
 
 ## Deliverables
 
