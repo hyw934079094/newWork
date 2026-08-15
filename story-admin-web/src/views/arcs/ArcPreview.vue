@@ -18,6 +18,7 @@ const pages = ref<PageItem[]>([]);
 const seriesName = ref('');
 const parsedByPageId = ref<Record<number, PagePreviewItem[]>>({});
 const readingStreamDialogVisible = ref(false);
+const coverLightboxVisible = ref(false);
 
 const readingStreamFullUrl = computed(() => {
   const id = arcId.value;
@@ -113,6 +114,15 @@ async function copyReadingStreamUrl() {
   }
 }
 
+function openCoverLightbox() {
+  if (arc.value?.coverAssetId == null) return;
+  coverLightboxVisible.value = true;
+}
+
+function closeCoverLightbox() {
+  coverLightboxVisible.value = false;
+}
+
 function goBack() {
   const id = arcId.value;
   if (route.query.from === 'pages' && Number.isFinite(id) && id > 0) {
@@ -206,12 +216,19 @@ onMounted(() => {
     </el-dialog>
 
     <div v-loading="loading" class="reader">
-      <img
+      <button
         v-if="arc?.coverAssetId != null"
-        class="arc-cover"
-        :src="assetContentUrl(arc.coverAssetId)"
-        :alt="arc.title"
-      />
+        type="button"
+        class="arc-cover-btn"
+        title="查看大图"
+        @click="openCoverLightbox"
+      >
+        <img
+          class="arc-cover"
+          :src="assetContentUrl(arc.coverAssetId)"
+          :alt="arc.title"
+        />
+      </button>
       <h1 v-if="arc" class="arc-title">{{ arc.title }}</h1>
       <p v-if="arc?.summary" class="summary">{{ arc.summary }}</p>
       <p v-if="!loading && !pages.length" class="empty">本篇章暂无页面</p>
@@ -220,6 +237,23 @@ onMounted(() => {
         <PagePreview :items="page.id != null ? parsedByPageId[page.id] ?? [] : []" />
       </template>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="coverLightboxVisible && arc?.coverAssetId != null"
+        class="cover-lightbox"
+        role="dialog"
+        aria-modal="true"
+        @click="closeCoverLightbox"
+      >
+        <img
+          class="cover-lightbox-img"
+          :src="assetContentUrl(arc.coverAssetId)"
+          :alt="arc.title"
+          @click.stop
+        />
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -259,14 +293,47 @@ onMounted(() => {
   line-height: 1.75;
   min-height: 200px;
 }
+.arc-cover-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 12px;
+  margin-bottom: 28px;
+}
+.arc-cover-btn:focus-visible {
+  outline: 2px solid #2f6fed;
+  outline-offset: 2px;
+}
 .arc-cover {
   width: 100%;
   display: block;
   border-radius: 12px;
   background: #eef1f7;
-  margin-bottom: 28px;
   object-fit: cover;
   max-height: 360px;
+}
+.cover-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(12, 18, 32, 0.72);
+  cursor: zoom-out;
+}
+.cover-lightbox-img {
+  max-width: min(860px, 92vw);
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  background: #111827;
+  cursor: default;
 }
 .arc-title {
   margin: 0 0 12px;

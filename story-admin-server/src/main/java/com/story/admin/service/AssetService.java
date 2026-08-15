@@ -213,6 +213,35 @@ public class AssetService {
   }
 
   @Transactional
+  public List<Asset> batchLink(
+      List<Long> assetIds,
+      AssetLinkType linkType,
+      List<Long> seriesIds,
+      List<Long> arcIds,
+      List<Long> characterIds) {
+    if (assetIds == null || assetIds.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "assetIds is required");
+    }
+    if (linkType == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "linkType is required");
+    }
+    LinkedHashSet<Long> unique = uniqueIds(assetIds);
+    if (unique.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "assetIds is required");
+    }
+    List<Asset> result = new ArrayList<>();
+    for (Long id : unique) {
+      Asset asset = getRaw(id);
+      if (asset.getStatus() != AssetStatus.NORMAL) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "asset is not NORMAL: " + id);
+      }
+      applyLinks(id, linkType, seriesIds, arcIds, characterIds);
+      result.add(hydrate(getRaw(id)));
+    }
+    return result;
+  }
+
+  @Transactional
   public Asset update(Long id, AssetUpdateRequest req) {
     if (req == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");

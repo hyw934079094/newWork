@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import { assetContentUrl } from '../../api/asset';
 
 export type PagePreviewChild = {
@@ -17,6 +18,19 @@ defineProps<{
   items: PagePreviewItem[];
 }>();
 
+const lightboxAssetId = ref<number | null>(null);
+const lightboxAlt = ref('');
+
+function openLightbox(assetId: number, alt?: string) {
+  lightboxAssetId.value = assetId;
+  lightboxAlt.value = alt ?? '';
+}
+
+function closeLightbox() {
+  lightboxAssetId.value = null;
+  lightboxAlt.value = '';
+}
+
 function childClass(type: string): string {
   return type === 'DIALOGUE' ? 'dialogue' : 'body';
 }
@@ -31,11 +45,15 @@ function childClass(type: string): string {
       <hr v-else-if="item.type === 'DIVIDER'" class="block-divider" />
       <div v-else-if="item.type === 'BEAT'" class="beat">
         <div class="figure">
-          <img
+          <button
             v-if="item.coverAssetId != null"
-            :src="assetContentUrl(item.coverAssetId)"
-            alt="画面组插画"
-          />
+            type="button"
+            class="figure-btn"
+            title="查看大图"
+            @click="openLightbox(item.coverAssetId, '画面组插画')"
+          >
+            <img :src="assetContentUrl(item.coverAssetId)" alt="画面组插画" />
+          </button>
           <div v-else class="figure-placeholder">未选择封面</div>
         </div>
         <div v-if="item.children?.length" class="children">
@@ -50,6 +68,23 @@ function childClass(type: string): string {
       </div>
       <p v-else class="block-body">{{ item.text }}</p>
     </template>
+
+    <Teleport to="body">
+      <div
+        v-if="lightboxAssetId != null"
+        class="preview-lightbox"
+        role="dialog"
+        aria-modal="true"
+        @click="closeLightbox"
+      >
+        <img
+          class="preview-lightbox-img"
+          :src="assetContentUrl(lightboxAssetId)"
+          :alt="lightboxAlt"
+          @click.stop
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -96,6 +131,19 @@ function childClass(type: string): string {
   border-top: 1px solid #d8deea;
   margin: 0;
 }
+.figure-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 10px;
+}
+.figure-btn:focus-visible {
+  outline: 2px solid #2f6fed;
+  outline-offset: 2px;
+}
 .beat .figure img {
   width: 100%;
   display: block;
@@ -120,5 +168,25 @@ function childClass(type: string): string {
   padding-left: 12px;
   border-left: 3px solid #c5d0e6;
   color: #33415f;
+}
+.preview-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(12, 18, 32, 0.72);
+  cursor: zoom-out;
+}
+.preview-lightbox-img {
+  max-width: min(860px, 92vw);
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  background: #111827;
+  cursor: default;
 }
 </style>

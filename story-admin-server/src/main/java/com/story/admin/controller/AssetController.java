@@ -2,6 +2,7 @@ package com.story.admin.controller;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetLinkType;
+import com.story.admin.dto.AssetBatchLinkRequest;
 import com.story.admin.dto.AssetMoveRequest;
 import com.story.admin.dto.AssetReorderByScopeRequest;
 import com.story.admin.dto.AssetReorderRequest;
@@ -66,6 +67,15 @@ public class AssetController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
     }
     assetService.reorderByScope(body.categoryId(), body.scope(), body.scopeId(), body.orderedIds());
+  }
+
+  @PutMapping("/batch-link")
+  public List<Asset> batchLink(@RequestBody AssetBatchLinkRequest body) {
+    if (body == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
+    }
+    return assetService.batchLink(
+        body.assetIds(), body.linkType(), body.seriesIds(), body.arcIds(), body.characterIds());
   }
 
   @GetMapping

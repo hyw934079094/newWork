@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import draggable from 'vuedraggable';
 import {
   assetContentUrl,
+  batchLinkAssets,
   listAssets,
   moveAsset,
   recycleAsset,
@@ -32,6 +33,17 @@ const recycling = ref(false);
 const replacing = ref(false);
 const previewBust = ref(0);
 const lightboxVisible = ref(false);
+const checkedIds = ref<number[]>([]);
+const batchDialogVisible = ref(false);
+const batchSaving = ref(false);
+const batchForm = reactive({
+  linkType: 'NONE' as AssetLinkType,
+  seriesIds: [] as number[],
+  arcIds: [] as number[],
+  characterIds: [] as number[],
+});
+const batchSeriesForArc = ref<number | ''>('');
+const batchArcs = ref<ArcItem[]>([]);
 const replaceFileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
@@ -409,6 +421,7 @@ watch(selectedAssetId, async () => {
 async function selectCategory(id: number) {
   if (Date.now() - dragEndedAt < 300) return;
   selectedCategoryId.value = id;
+  clearChecked();
   await loadAssets();
 }
 
@@ -462,6 +475,92 @@ async function onFilesPicked(ev: Event) {
 
 function selectAsset(id: number) {
   selectedAssetId.value = id;
+}
+
+function isChecked(id: number): boolean {
+  return checkedIds.value.includes(id);
+}
+
+function toggleChecked(id: number, ev?: Event) {
+  ev?.stopPropagation();
+  if (isChecked(id)) {
+    checkedIds.value = checkedIds.value.filter((x) => x !== id);
+  } else {
+    checkedIds.value = [...checkedIds.value, id];
+  }
+}
+
+function clearChecked() {
+  checkedIds.value = [];
+}
+
+function openBatchLinkDialog() {
+  if (!checkedIds.value.length) {
+    ElMessage.warning('请先勾选素材');
+    return;
+  }
+  batchForm.linkType = 'NONE';
+  batchForm.seriesIds = [];
+  batchForm.arcIds = [];
+  batchForm.characterIds = [];
+  batchSeriesForArc.value = '';
+  batchArcs.value = [];
+  batchDialogVisible.value = true;
+}
+
+function onBatchLinkTypeChange() {
+  batchForm.seriesIds = [];
+  batchForm.arcIds = [];
+  batchForm.characterIds = [];
+  batchSeriesForArc.value = '';
+  batchArcs.value = [];
+}
+
+async function onBatchSeriesForArcChange(id: number | '') {
+  batchForm.arcIds = [];
+  if (typeof id === 'number') {
+    try {
+      batchArcs.value = await listArcs(id);
+    } catch {
+      batchArcs.value = [];
+    }
+  } else {
+    batchArcs.value = [];
+  }
+}
+
+async function confirmBatchLink() {
+  if (!checkedIds.value.length) return;
+  if (batchForm.linkType === 'SERIES' && !batchForm.seriesIds.length) {
+    ElMessage.warning('请选择系列');
+    return;
+  }
+  if (batchForm.linkType === 'ARC' && !batchForm.arcIds.length) {
+    ElMessage.warning('请选择篇章');
+    return;
+  }
+  if (batchForm.linkType === 'CHARACTER' && !batchForm.characterIds.length) {
+    ElMessage.warning('请选择人物');
+    return;
+  }
+  batchSaving.value = true;
+  try {
+    const updated = await batchLinkAssets({
+      assetIds: [...checkedIds.value],
+      linkType: batchForm.linkType,
+      seriesIds: batchForm.linkType === 'SERIES' ? [...batchForm.seriesIds] : [],
+      arcIds: batchForm.linkType === 'ARC' ? [...batchForm.arcIds] : [],
+      characterIds: batchForm.linkType === 'CHARACTER' ? [...batchForm.characterIds] : [],
+    });
+    ElMessage.success(`已关联 ${updated.length} 项`);
+    batchDialogVisible.value = false;
+    clearChecked();
+    await loadAssets(selectedAssetId.value);
+  } catch (e) {
+    ElMessage.error(apiError(e, '批量关联失败'));
+  } finally {
+    batchSaving.value = false;
+  }
 }
 
 function openLightbox() {
@@ -720,6 +819,10 @@ onMounted(async () => {
           @change="onFilesPicked"
         />
         <el-button @click="router.push('/recycle')">回收站</el-button>
+        <el-button :disabled="!checkedIds.length" @click="clearChecked">清空选择</el-button>
+        <el-button type="success" plain :disabled="!checkedIds.length" @click="openBatchLinkDialog">
+          批量关联{{ checkedIds.length ? ` (${checkedIds.length})` : '' }}
+        </el-button>
         <el-button
           type="primary"
           :loading="uploading"
@@ -825,7 +928,7 @@ onMounted(async () => {
           <template #item="{ element, index }">
             <div
               class="thumb"
-              :class="{ active: element.id === selectedAssetId }"
+              :class="{ active: element.id === selectedAssetId, checked: isChecked(element.id) }"
               role="button"
               tabindex="0"
               :data-thumb-id="element.id"
@@ -833,6 +936,13 @@ onMounted(async () => {
               @click="selectAsset(element.id)"
               @keydown.enter.prevent="selectAsset(element.id)"
             >
+              <label class="thumb-check" @click.stop>
+                <input
+                  type="checkbox"
+                  :checked="isChecked(element.id)"
+                  @change="toggleChecked(element.id)"
+                />
+              </label>
               <img
                 :src="assetContentUrl(element.id, previewBust || undefined)"
                 :alt="element.displayName"
@@ -988,6 +1098,99 @@ onMounted(async () => {
     </div>
 
   </section>
+
+  <el-dialog v-model="batchDialogVisible" title="批量关联" width="480px" destroy-on-close>
+    <p class="batch-hint">已选 {{ checkedIds.length }} 项，确认后将覆盖原有关联。</p>
+    <el-form label-position="top">
+      <el-form-item label="关联类型">
+        <el-select
+          v-model="batchForm.linkType"
+          style="width: 100%"
+          @change="onBatchLinkTypeChange"
+        >
+          <el-option label="无（取消关联）" value="NONE" />
+          <el-option label="系列" value="SERIES" />
+          <el-option label="篇章" value="ARC" />
+          <el-option label="人物" value="CHARACTER" />
+        </el-select>
+      </el-form-item>
+      <el-form-item v-if="batchForm.linkType === 'SERIES'" label="关联系列">
+        <el-select
+          v-model="batchForm.seriesIds"
+          multiple
+          filterable
+          clearable
+          placeholder="选择系列"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="s in seriesList"
+            :key="s.id"
+            :label="s.name"
+            :value="s.id!"
+          />
+        </el-select>
+      </el-form-item>
+      <template v-if="batchForm.linkType === 'ARC'">
+        <el-form-item label="所属系列">
+          <el-select
+            v-model="batchSeriesForArc"
+            clearable
+            filterable
+            placeholder="先选择系列"
+            style="width: 100%"
+            @change="onBatchSeriesForArcChange"
+          >
+            <el-option
+              v-for="s in seriesList"
+              :key="s.id"
+              :label="s.name"
+              :value="s.id!"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联篇章">
+          <el-select
+            v-model="batchForm.arcIds"
+            multiple
+            filterable
+            clearable
+            placeholder="选择篇章"
+            :disabled="typeof batchSeriesForArc !== 'number'"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="a in batchArcs"
+              :key="a.id"
+              :label="a.title"
+              :value="a.id!"
+            />
+          </el-select>
+        </el-form-item>
+      </template>
+      <el-form-item v-if="batchForm.linkType === 'CHARACTER'" label="关联人物">
+        <el-select
+          v-model="batchForm.characterIds"
+          multiple
+          filterable
+          clearable
+          placeholder="选择人物"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="c in characters"
+            :key="c.id"
+            :label="c.name"
+            :value="c.id!"
+          />
+        </el-select>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="batchDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="batchSaving" @click="confirmBatchLink">确定</el-button>
+    </template>
+  </el-dialog>
 
   <Teleport to="body">
     <div
@@ -1224,6 +1427,7 @@ onMounted(async () => {
   min-height: 80px;
 }
 .thumb {
+  position: relative;
   flex: 0 0 auto;
   width: 72px;
   height: 72px;
@@ -1234,16 +1438,40 @@ onMounted(async () => {
   cursor: grab;
   background: #f4f6fa;
 }
+.thumb-check {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  display: flex;
+  margin: 0;
+  padding: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+.thumb-check input {
+  margin: 0;
+  cursor: pointer;
+}
 .thumb-ghost {
   opacity: 0.4;
 }
 .thumb.active {
   border-color: #3b5bcc;
 }
+.thumb.checked {
+  box-shadow: inset 0 0 0 2px #67c23a;
+}
 .thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.batch-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #4a5878;
 }
 .file-info {
   list-style: none;

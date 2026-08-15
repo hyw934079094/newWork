@@ -77,6 +77,17 @@ export async function updateAsset(id: number, body: AssetUpdatePayload): Promise
   return data;
 }
 
+export async function batchLinkAssets(body: {
+  assetIds: number[];
+  linkType: AssetLinkType;
+  seriesIds?: number[];
+  arcIds?: number[];
+  characterIds?: number[];
+}): Promise<AssetItem[]> {
+  const { data } = await http.put<AssetItem[]>('/assets/batch-link', body);
+  return data;
+}
+
 export async function uploadAssets(
   categoryId: number,
   files: File[],

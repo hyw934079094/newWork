@@ -128,6 +128,65 @@ class AssetLinkServiceTest {
   }
 
   @Test
+  void batchLinkOverwritesAndClears() {
+    AssetCategory category = persistCategory("batch-link", "批量关联");
+    Asset a = persistAsset(category.getId(), "批量A");
+    Asset b = persistAsset(category.getId(), "批量B");
+    CharacterProfile character =
+        characterService.create(
+            new CharacterCreateRequest(
+                "批量角色", null, null, null, null, null, null, null, null, null, null, null));
+    StorySeries series =
+        seriesService.create(new SeriesCreateRequest("批量系列", null, null, null, null));
+
+    assetService.update(
+        a.getId(),
+        AssetUpdateRequest.builder()
+            .linkType(AssetLinkType.CHARACTER)
+            .characterIds(List.of(character.getId()))
+            .build());
+
+    List<Asset> linked =
+        assetService.batchLink(
+            List.of(a.getId(), b.getId(), a.getId()),
+            AssetLinkType.SERIES,
+            List.of(series.getId()),
+            null,
+            null);
+
+    assertThat(linked).hasSize(2);
+    assertThat(linked).allSatisfy(asset -> {
+      assertThat(asset.getLinkType()).isEqualTo(AssetLinkType.SERIES);
+      assertThat(asset.getSeriesIds()).containsExactly(series.getId());
+      assertThat(asset.getCharacterIds()).isEmpty();
+    });
+
+    List<Asset> cleared =
+        assetService.batchLink(
+            List.of(a.getId(), b.getId()), AssetLinkType.NONE, null, null, null);
+    assertThat(cleared).allSatisfy(asset -> {
+      assertThat(asset.getLinkType()).isEqualTo(AssetLinkType.NONE);
+      assertThat(asset.getSeriesIds()).isEmpty();
+      assertThat(asset.getCharacterIds()).isEmpty();
+      assertThat(asset.getArcIds()).isEmpty();
+    });
+  }
+
+  @Test
+  void batchLinkRejectsEmptyAndDeleted() {
+    assertThatThrownBy(() -> assetService.batchLink(List.of(), AssetLinkType.NONE, null, null, null))
+        .hasMessageContaining("assetIds");
+
+    Asset asset = persistAsset("batch-deleted");
+    assetService.recycle(asset.getId());
+    assertThatThrownBy(
+            () ->
+                assetService.batchLink(
+                    List.of(asset.getId()), AssetLinkType.NONE, null, null, null))
+        .hasMessageContaining("NORMAL");
+  }
+
+  @Test
   void listByLinkTypeSeries() {
     AssetCategory category = persistCategory("list-series", "系列筛选");
     Asset unlinked = persistAsset(category.getId(), "未关联");
