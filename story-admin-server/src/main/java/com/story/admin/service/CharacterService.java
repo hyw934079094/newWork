@@ -4,6 +4,7 @@ import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetStatus;
+import com.story.admin.domain.AssetUnlinkedOrder;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.dto.CharacterAddFormRequest;
 import com.story.admin.dto.CharacterCreateRequest;
@@ -15,9 +16,11 @@ import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.AssetUnlinkedOrderRepository;
 import com.story.admin.repository.CharacterProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +42,7 @@ public class CharacterService {
   private final AssetCharacterRelRepository characterRelRepository;
   private final AssetRepository assetRepository;
   private final AssetCategoryRepository categoryRepository;
+  private final AssetUnlinkedOrderRepository unlinkedOrderRepository;
   private final AssetService assetService;
   private final CharacterIdentityService identityService;
 
@@ -47,12 +51,14 @@ public class CharacterService {
       AssetCharacterRelRepository characterRelRepository,
       AssetRepository assetRepository,
       AssetCategoryRepository categoryRepository,
+      AssetUnlinkedOrderRepository unlinkedOrderRepository,
       AssetService assetService,
       CharacterIdentityService identityService) {
     this.repo = repo;
     this.characterRelRepository = characterRelRepository;
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
+    this.unlinkedOrderRepository = unlinkedOrderRepository;
     this.assetService = assetService;
     this.identityService = identityService;
   }
@@ -215,6 +221,7 @@ public class CharacterService {
         }
       }
     }
+    Map<Long, Asset> assetById = new LinkedHashMap<>();
     for (Long assetId : unique) {
       Asset asset =
           assetRepository
@@ -227,11 +234,34 @@ public class CharacterService {
         throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST, "asset is not available: " + assetId);
       }
+      assetById.put(assetId, asset);
     }
+    List<Long> previouslyLinked = characterRelRepository.findAssetIdsByCharacterId(characterId);
     characterRelRepository.deleteByCharacterId(characterId);
     characterRelRepository.flush();
+    for (Long assetId : previouslyLinked) {
+      if (!unique.contains(assetId)
+          && characterRelRepository.findCharacterIdsByAssetId(assetId).isEmpty()) {
+        Asset asset =
+            assetRepository
+                .findById(assetId)
+                .orElseThrow(
+                    () ->
+                        new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "asset not found: " + assetId));
+        ensureUnlinkedOrder(asset);
+      }
+    }
     for (Long assetId : unique) {
-      characterRelRepository.save(new AssetCharacterRel(assetId, characterId));
+      Asset asset = assetById.get(assetId);
+      Long categoryId = asset.getCategoryId();
+      int next =
+          characterRelRepository
+              .findMaxSortOrderByCharacterIdAndCategoryId(characterId, categoryId)
+              .orElse(-1)
+              + 1;
+      characterRelRepository.save(new AssetCharacterRel(assetId, characterId, next));
+      unlinkedOrderRepository.deleteByCategoryIdAndAssetId(categoryId, assetId);
     }
     return listAssets(characterId);
   }
@@ -248,6 +278,16 @@ public class CharacterService {
       }
     }
     return replaceAssets(characterId, current);
+  }
+
+  private void ensureUnlinkedOrder(Asset asset) {
+    Long categoryId = asset.getCategoryId();
+    Long assetId = asset.getId();
+    if (unlinkedOrderRepository.findByCategoryIdAndAssetId(categoryId, assetId).isPresent()) {
+      return;
+    }
+    int next = unlinkedOrderRepository.findMaxSortOrderByCategoryId(categoryId).orElse(-1) + 1;
+    unlinkedOrderRepository.save(new AssetUnlinkedOrder(categoryId, assetId, next));
   }
 
   private Long defaultPortraitCategoryId() {
