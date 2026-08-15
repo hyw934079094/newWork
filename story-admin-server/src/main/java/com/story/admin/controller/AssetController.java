@@ -3,6 +3,7 @@ package com.story.admin.controller;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetLinkType;
 import com.story.admin.dto.AssetMoveRequest;
+import com.story.admin.dto.AssetReorderByScopeRequest;
 import com.story.admin.dto.AssetReorderRequest;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.service.AssetService;
@@ -57,6 +58,14 @@ public class AssetController {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
     }
     assetService.reorder(body.categoryId(), body.orderedIds());
+  }
+
+  @PutMapping("/reorder-by-scope")
+  public void reorderByScope(@RequestBody AssetReorderByScopeRequest body) {
+    if (body == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "body is required");
+    }
+    assetService.reorderByScope(body.categoryId(), body.scope(), body.scopeId(), body.orderedIds());
   }
 
   @GetMapping

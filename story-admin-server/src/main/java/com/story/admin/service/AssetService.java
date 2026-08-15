@@ -5,6 +5,7 @@ import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetArcRel;
 import com.story.admin.domain.AssetArcRelId;
 import com.story.admin.domain.AssetCharacterRel;
+import com.story.admin.domain.AssetCharacterRelId;
 import com.story.admin.domain.AssetLinkType;
 import com.story.admin.domain.AssetSeriesRel;
 import com.story.admin.domain.AssetSeriesRelId;
@@ -348,6 +349,136 @@ public class AssetService {
       Asset asset = byId.get(orderedIds.get(i));
       asset.setSortOrder(i);
       assetRepository.save(asset);
+    }
+  }
+
+  @Transactional
+  public void reorderByScope(Long categoryId, String scope, Long scopeId, List<Long> orderedIds) {
+    if (categoryId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "categoryId is required");
+    }
+    if (orderedIds == null || orderedIds.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedIds is required");
+    }
+    if (orderedIds.stream().anyMatch(Objects::isNull)
+        || new HashSet<>(orderedIds).size() != orderedIds.size()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedIds must be unique and non-null");
+    }
+    if (!categoryRepository.existsById(categoryId)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "category not found: " + categoryId);
+    }
+    String normalizedScope = normalizeReorderScope(scope);
+    requireScopeIdWhenNeeded(normalizedScope, scopeId);
+    ensureScopeEntityExists(normalizedScope, scopeId);
+
+    Set<Long> expectedIds = expectedIdsForScope(categoryId, normalizedScope, scopeId);
+    if (expectedIds.size() != orderedIds.size() || !expectedIds.containsAll(orderedIds)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "orderedIds must match all assets in the scope");
+    }
+
+    for (int i = 0; i < orderedIds.size(); i++) {
+      writeScopeSortOrder(categoryId, normalizedScope, scopeId, orderedIds.get(i), i);
+    }
+  }
+
+  private static String normalizeReorderScope(String scope) {
+    if (scope == null || scope.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "scope is required");
+    }
+    String normalized = scope.trim().toUpperCase(Locale.ROOT);
+    if (!Set.of("CHARACTER", "SERIES", "ARC", "UNLINKED").contains(normalized)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid scope: " + scope);
+    }
+    return normalized;
+  }
+
+  private static void requireScopeIdWhenNeeded(String scope, Long scopeId) {
+    if (!"UNLINKED".equals(scope) && scopeId == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "scopeId is required for " + scope);
+    }
+  }
+
+  private void ensureScopeEntityExists(String scope, Long scopeId) {
+    switch (scope) {
+      case "CHARACTER" -> {
+        if (!characterProfileRepository.existsById(scopeId)) {
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND, "character not found: " + scopeId);
+        }
+      }
+      case "SERIES" -> {
+        if (!storySeriesRepository.existsById(scopeId)) {
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND, "series not found: " + scopeId);
+        }
+      }
+      case "ARC" -> {
+        if (!storyArcRepository.existsById(scopeId)) {
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND, "arc not found: " + scopeId);
+        }
+      }
+      default -> {
+        // UNLINKED: no entity
+      }
+    }
+  }
+
+  private Set<Long> expectedIdsForScope(Long categoryId, String scope, Long scopeId) {
+    List<Asset> assets =
+        switch (scope) {
+          case "CHARACTER" -> list(categoryId, "NORMAL", "", null, scopeId);
+          case "SERIES" -> list(categoryId, "NORMAL", "", null, null, "SERIES", scopeId, null);
+          case "ARC" -> list(categoryId, "NORMAL", "", null, null, "ARC", null, scopeId);
+          case "UNLINKED" -> list(categoryId, "NORMAL", "", "unlinked", null);
+          default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid scope: " + scope);
+        };
+    return assets.stream().map(Asset::getId).collect(Collectors.toSet());
+  }
+
+  private void writeScopeSortOrder(
+      Long categoryId, String scope, Long scopeId, Long assetId, int sortOrder) {
+    switch (scope) {
+      case "CHARACTER" -> {
+        AssetCharacterRel rel =
+            characterRelRepository
+                .findById(new AssetCharacterRelId(assetId, scopeId))
+                .orElseThrow(
+                    () ->
+                        new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "character rel missing for asset: " + assetId));
+        rel.setSortOrder(sortOrder);
+        characterRelRepository.save(rel);
+      }
+      case "SERIES" -> {
+        AssetSeriesRel rel =
+            assetSeriesRelRepository
+                .findById(new AssetSeriesRelId(assetId, scopeId))
+                .orElseThrow(
+                    () ->
+                        new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "series rel missing for asset: " + assetId));
+        rel.setSortOrder(sortOrder);
+        assetSeriesRelRepository.save(rel);
+      }
+      case "ARC" -> {
+        AssetArcRel rel =
+            assetArcRelRepository
+                .findById(new AssetArcRelId(assetId, scopeId))
+                .orElseThrow(
+                    () ->
+                        new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST, "arc rel missing for asset: " + assetId));
+        rel.setSortOrder(sortOrder);
+        assetArcRelRepository.save(rel);
+      }
+      case "UNLINKED" -> {
+        AssetUnlinkedOrder order =
+            unlinkedOrderRepository
+                .findByCategoryIdAndAssetId(categoryId, assetId)
+                .orElseGet(() -> new AssetUnlinkedOrder(categoryId, assetId, sortOrder));
+        order.setSortOrder(sortOrder);
+        unlinkedOrderRepository.save(order);
+      }
+      default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid scope: " + scope);
     }
   }
 
