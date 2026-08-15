@@ -3,6 +3,7 @@ package com.story.admin.controller;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.ArcQuery;
+import com.story.admin.dto.ArcReadingStreamResponse;
 import com.story.admin.dto.ArcUpdateRequest;
 import com.story.admin.service.ArcService;
 import java.util.List;
@@ -39,6 +40,11 @@ public class ArcController {
   @GetMapping("/api/arcs/{id}")
   public StoryArc get(@PathVariable Long id) {
     return arcService.get(id);
+  }
+
+  @GetMapping("/api/arcs/{id}/reading-stream")
+  public ArcReadingStreamResponse readingStream(@PathVariable Long id) {
+    return arcService.readingStream(id);
   }
 
   @PutMapping("/api/arcs/{id}")

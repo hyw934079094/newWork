@@ -1,5 +1,8 @@
 package com.story.admin.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.story.admin.domain.ArcStatus;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetStatus;
@@ -7,6 +10,7 @@ import com.story.admin.domain.StoryArc;
 import com.story.admin.domain.StoryPage;
 import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.ArcQuery;
+import com.story.admin.dto.ArcReadingStreamResponse;
 import com.story.admin.dto.ArcUpdateRequest;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.PageAssetRefRepository;
@@ -14,8 +18,12 @@ import com.story.admin.repository.StoryArcRepository;
 import com.story.admin.repository.StoryPageRepository;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
@@ -26,23 +34,28 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ArcService {
 
+  private static final Logger log = LoggerFactory.getLogger(ArcService.class);
+
   private final StoryArcRepository repo;
   private final SeriesService seriesService;
   private final AssetRepository assetRepository;
   private final StoryPageRepository pageRepository;
   private final PageAssetRefRepository pageAssetRefRepository;
+  private final ObjectMapper objectMapper;
 
   public ArcService(
       StoryArcRepository repo,
       SeriesService seriesService,
       AssetRepository assetRepository,
       StoryPageRepository pageRepository,
-      PageAssetRefRepository pageAssetRefRepository) {
+      PageAssetRefRepository pageAssetRefRepository,
+      ObjectMapper objectMapper) {
     this.repo = repo;
     this.seriesService = seriesService;
     this.assetRepository = assetRepository;
     this.pageRepository = pageRepository;
     this.pageAssetRefRepository = pageAssetRefRepository;
+    this.objectMapper = objectMapper;
   }
 
   public List<StoryArc> listBySeries(Long seriesId, ArcQuery query) {
@@ -95,6 +108,140 @@ public class ArcService {
     pageRepository.deleteAll(pages);
     pageRepository.flush();
     repo.deleteById(id);
+  }
+
+  public ArcReadingStreamResponse readingStream(Long arcId) {
+    StoryArc arc = get(arcId);
+    List<StoryPage> pages = pageRepository.findByArcIdOrderBySortOrderAscIdAsc(arcId);
+    List<Map<String, Object>> segments = new ArrayList<>();
+    if (arc.getCoverAssetId() != null) {
+      Map<String, Object> cover = new LinkedHashMap<>();
+      cover.put("type", "ARC_COVER");
+      cover.put("assetId", arc.getCoverAssetId());
+      cover.put("contentPath", contentPath(arc.getCoverAssetId()));
+      segments.add(cover);
+    }
+    Map<String, Object> arcTitle = new LinkedHashMap<>();
+    arcTitle.put("type", "ARC_TITLE");
+    arcTitle.put("text", arc.getTitle());
+    segments.add(arcTitle);
+    if (arc.getSummary() != null && !arc.getSummary().isBlank()) {
+      Map<String, Object> summary = new LinkedHashMap<>();
+      summary.put("type", "ARC_SUMMARY");
+      summary.put("text", arc.getSummary());
+      segments.add(summary);
+    }
+    for (StoryPage page : pages) {
+      Map<String, Object> pageTitle = new LinkedHashMap<>();
+      pageTitle.put("type", "PAGE_TITLE");
+      pageTitle.put("pageId", page.getId());
+      pageTitle.put("pageSortOrder", page.getSortOrder());
+      pageTitle.put("text", page.getTitle());
+      segments.add(pageTitle);
+      appendContentSegments(segments, page);
+    }
+    return new ArcReadingStreamResponse(
+        arc.getId(),
+        arc.getTitle(),
+        arc.getSummary(),
+        arc.getCoverAssetId(),
+        contentPath(arc.getCoverAssetId()),
+        pages.size(),
+        segments);
+  }
+
+  private void appendContentSegments(List<Map<String, Object>> segments, StoryPage page) {
+    JsonNode root = parseContentArray(page.getContentJson());
+    if (root == null) {
+      return;
+    }
+    Long pageId = page.getId();
+    for (JsonNode item : root) {
+      if (item == null || !item.isObject()) {
+        continue;
+      }
+      String type = item.path("type").asText(null);
+      if (type == null) {
+        continue;
+      }
+      switch (type) {
+        case "TITLE", "BODY" -> {
+          Map<String, Object> seg = new LinkedHashMap<>();
+          seg.put("type", type);
+          seg.put("pageId", pageId);
+          seg.put("text", textOrEmpty(item));
+          segments.add(seg);
+        }
+        case "DIVIDER" -> {
+          Map<String, Object> seg = new LinkedHashMap<>();
+          seg.put("type", "DIVIDER");
+          seg.put("pageId", pageId);
+          segments.add(seg);
+        }
+        case "BEAT" -> appendBeatSegments(segments, pageId, item);
+        default -> log.debug("skip unknown content type in reading-stream: {}", type);
+      }
+    }
+  }
+
+  private void appendBeatSegments(
+      List<Map<String, Object>> segments, Long pageId, JsonNode beat) {
+    JsonNode coverNode = beat.get("coverAssetId");
+    if (coverNode != null && !coverNode.isNull() && coverNode.isIntegralNumber()) {
+      long assetId = coverNode.asLong();
+      Map<String, Object> image = new LinkedHashMap<>();
+      image.put("type", "IMAGE");
+      image.put("pageId", pageId);
+      image.put("assetId", assetId);
+      image.put("contentPath", contentPath(assetId));
+      image.put("role", "BEAT_COVER");
+      segments.add(image);
+    }
+    JsonNode children = beat.get("children");
+    if (children == null || children.isNull() || !children.isArray()) {
+      return;
+    }
+    for (JsonNode child : children) {
+      if (child == null || !child.isObject()) {
+        continue;
+      }
+      String childType = child.path("type").asText(null);
+      if ("BODY".equals(childType) || "DIALOGUE".equals(childType)) {
+        Map<String, Object> seg = new LinkedHashMap<>();
+        seg.put("type", childType);
+        seg.put("pageId", pageId);
+        seg.put("text", textOrEmpty(child));
+        segments.add(seg);
+      }
+    }
+  }
+
+  private JsonNode parseContentArray(String contentJson) {
+    if (contentJson == null || contentJson.isBlank()) {
+      return null;
+    }
+    try {
+      JsonNode root = objectMapper.readTree(contentJson);
+      if (root == null || !root.isArray()) {
+        return null;
+      }
+      return root;
+    } catch (JsonProcessingException ex) {
+      log.warn("invalid content_json in reading-stream, treating as empty: {}", ex.getMessage());
+      return null;
+    }
+  }
+
+  private static String textOrEmpty(JsonNode node) {
+    JsonNode text = node.get("text");
+    if (text == null || text.isNull()) {
+      return "";
+    }
+    return text.asText("");
+  }
+
+  private static String contentPath(Long assetId) {
+    return assetId == null ? null : "/api/assets/" + assetId + "/content";
   }
 
   private void applyFields(
