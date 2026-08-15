@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import draggable from 'vuedraggable';
 import {
@@ -60,6 +60,7 @@ const filterArcId = ref<number | ''>('');
 const characterFilter = ref<'unlinked' | 'all' | number>('all');
 const indexInput = ref('1');
 const fileInput = ref<HTMLInputElement | null>(null);
+const thumbsScroller = ref<HTMLElement | null>(null);
 const categoryBuckets = reactive<Record<number, AssetItem[]>>({});
 const dragging = ref(false);
 const thumbGroup = { name: 'assets', pull: true, put: false };
@@ -67,6 +68,11 @@ const categoryGroup = { name: 'assets', pull: false, put: true };
 const seriesForArc = ref<number | ''>('');
 let syncingForm = false;
 let syncGen = 0;
+let thumbEdgeDir = 0;
+let thumbAutoScrollRaf = 0;
+
+const THUMB_EDGE_ZONE = 48;
+const THUMB_SCROLL_SPEED = 18;
 
 type DragChangeEvent = {
   added?: { element: AssetItem; newIndex: number };
@@ -96,14 +102,61 @@ function restoreDragSnapshot() {
   clearBuckets();
 }
 
+function onThumbPointerMove(ev: DragEvent | PointerEvent | MouseEvent) {
+  const el = thumbsScroller.value;
+  if (!el || !dragging.value) return;
+  const x = ev.clientX;
+  const rect = el.getBoundingClientRect();
+  if (x < rect.left + THUMB_EDGE_ZONE) {
+    thumbEdgeDir = -1;
+  } else if (x > rect.right - THUMB_EDGE_ZONE) {
+    thumbEdgeDir = 1;
+  } else {
+    thumbEdgeDir = 0;
+  }
+}
+
+function tickThumbAutoScroll() {
+  const el = thumbsScroller.value;
+  if (!el || !dragging.value) {
+    thumbAutoScrollRaf = 0;
+    thumbEdgeDir = 0;
+    return;
+  }
+  if (thumbEdgeDir !== 0) {
+    el.scrollLeft += thumbEdgeDir * THUMB_SCROLL_SPEED;
+  }
+  thumbAutoScrollRaf = requestAnimationFrame(tickThumbAutoScroll);
+}
+
+function startThumbAutoScroll() {
+  document.addEventListener('dragover', onThumbPointerMove);
+  document.addEventListener('pointermove', onThumbPointerMove);
+  if (!thumbAutoScrollRaf) {
+    thumbAutoScrollRaf = requestAnimationFrame(tickThumbAutoScroll);
+  }
+}
+
+function stopThumbAutoScroll() {
+  document.removeEventListener('dragover', onThumbPointerMove);
+  document.removeEventListener('pointermove', onThumbPointerMove);
+  if (thumbAutoScrollRaf) {
+    cancelAnimationFrame(thumbAutoScrollRaf);
+    thumbAutoScrollRaf = 0;
+  }
+  thumbEdgeDir = 0;
+}
+
 function onDragStart() {
   dragging.value = true;
   dragSnapshot = assets.value.map((item) => ({ ...item }));
+  startThumbAutoScroll();
 }
 
 function onDragEnd() {
   dragging.value = false;
   dragEndedAt = Date.now();
+  stopThumbAutoScroll();
 }
 
 async function onThumbsChange(evt: DragChangeEvent) {
@@ -735,6 +788,10 @@ onMounted(async () => {
     ElMessage.error(apiError(e, '加载分类失败'));
   }
 });
+
+onUnmounted(() => {
+  stopThumbAutoScroll();
+});
 </script>
 
 <template>
@@ -913,44 +970,50 @@ onMounted(async () => {
         <p v-if="reorderHint" class="search-reorder-hint">
           {{ reorderHint }}
         </p>
-        <draggable
-          v-model="assets"
-          item-key="id"
-          :group="thumbGroup"
-          :sort="canSortThumbs"
-          :animation="150"
-          class="thumbs"
-          ghost-class="thumb-ghost"
-          @start="onDragStart"
-          @end="onDragEnd"
-          @change="onThumbsChange"
-        >
-          <template #item="{ element, index }">
-            <div
-              class="thumb"
-              :class="{ active: element.id === selectedAssetId, checked: isChecked(element.id) }"
-              role="button"
-              tabindex="0"
-              :data-thumb-id="element.id"
-              :title="`${index + 1}. ${element.displayName}`"
-              @click="selectAsset(element.id)"
-              @keydown.enter.prevent="selectAsset(element.id)"
-            >
-              <label class="thumb-check" @click.stop>
-                <input
-                  type="checkbox"
-                  :checked="isChecked(element.id)"
-                  @change="toggleChecked(element.id)"
+        <div ref="thumbsScroller" class="thumbs">
+          <draggable
+            v-model="assets"
+            item-key="id"
+            :group="thumbGroup"
+            :sort="canSortThumbs"
+            :animation="150"
+            :scroll="true"
+            :force-auto-scroll-fallback="true"
+            :scroll-sensitivity="48"
+            :scroll-speed="20"
+            class="thumbs-track"
+            ghost-class="thumb-ghost"
+            @start="onDragStart"
+            @end="onDragEnd"
+            @change="onThumbsChange"
+          >
+            <template #item="{ element, index }">
+              <div
+                class="thumb"
+                :class="{ active: element.id === selectedAssetId, checked: isChecked(element.id) }"
+                role="button"
+                tabindex="0"
+                :data-thumb-id="element.id"
+                :title="`${index + 1}. ${element.displayName}`"
+                @click="selectAsset(element.id)"
+                @keydown.enter.prevent="selectAsset(element.id)"
+              >
+                <label class="thumb-check" @click.stop>
+                  <input
+                    type="checkbox"
+                    :checked="isChecked(element.id)"
+                    @change="toggleChecked(element.id)"
+                  />
+                </label>
+                <img
+                  :src="assetContentUrl(element.id, previewBust || undefined)"
+                  :alt="element.displayName"
+                  draggable="false"
                 />
-              </label>
-              <img
-                :src="assetContentUrl(element.id, previewBust || undefined)"
-                :alt="element.displayName"
-                draggable="false"
-              />
-            </div>
-          </template>
-        </draggable>
+              </div>
+            </template>
+          </draggable>
+        </div>
       </section>
 
       <div class="pane editor">
@@ -1420,11 +1483,16 @@ onMounted(async () => {
   line-height: 1.5;
 }
 .thumbs {
-  display: flex;
-  gap: 8px;
   overflow-x: auto;
   padding-bottom: 6px;
   min-height: 80px;
+}
+.thumbs-track {
+  display: flex;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+  min-height: 72px;
 }
 .thumb {
   position: relative;
