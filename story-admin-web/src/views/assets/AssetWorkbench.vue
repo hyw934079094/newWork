@@ -71,8 +71,8 @@ let syncGen = 0;
 let thumbEdgeDir = 0;
 let thumbAutoScrollRaf = 0;
 
-const THUMB_EDGE_ZONE = 48;
-const THUMB_SCROLL_SPEED = 18;
+const THUMB_EDGE_ZONE = 56;
+const THUMB_SCROLL_SPEED = 6;
 
 type DragChangeEvent = {
   added?: { element: AssetItem; newIndex: number };
@@ -979,8 +979,8 @@ onUnmounted(() => {
             :animation="150"
             :scroll="true"
             :force-auto-scroll-fallback="true"
-            :scroll-sensitivity="48"
-            :scroll-speed="20"
+            :scroll-sensitivity="56"
+            :scroll-speed="8"
             class="thumbs-track"
             ghost-class="thumb-ghost"
             @start="onDragStart"
