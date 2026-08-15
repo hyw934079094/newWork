@@ -11,6 +11,7 @@
 - [故事页面画面组与图文间距](docs/superpowers/specs/2026-08-14-story-page-beat-layout-design.md)：竖滚阅读 + 画面组（一图多文）间距档位（状态：已实现（首期），随篇章/页面模块落地）。
 - [人物身高与素材挑选优化](docs/superpowers/specs/2026-08-14-character-height-asset-picker-design.md)：人物可选身高（cm）+ 分类/关键字缩略图挑选弹窗 + 人物管理页排版首期美化（状态：已实现（首期））。
 - [素材关联系列/篇章/人物](docs/superpowers/specs/2026-08-15-asset-link-series-arc-design.md)：三类互斥多选关联 + 工作台筛选· [实现计划](docs/superpowers/plans/2026-08-15-asset-link-series-arc.md) · [验收](docs/superpowers/acceptance/2026-08-15-asset-link-series-arc.md)（状态：已实现（首期））。
+- [素材工作台筛选作用域独立排序](docs/superpowers/specs/2026-08-15-asset-scope-sort-design.md)：人物/系列/篇章/无关联各自持久化顺序，关键字临时拖 · [验收](docs/superpowers/acceptance/2026-08-15-asset-scope-sort.md)（状态：已实现（首期））。
 - [故事系列管理（首期）](docs/superpowers/specs/2026-08-14-story-series-design.md)：系列 CRUD、状态/简介/标签、素材库封面单选与硬删封面 409（状态：已实现（首期））。
 - 管理端基础登录：Session + 种子 `admin/admin`；验收见 [acceptance](docs/superpowers/acceptance/2026-08-14-admin-login.md)。
 
