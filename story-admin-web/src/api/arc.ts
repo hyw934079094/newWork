@@ -51,3 +51,7 @@ export async function updateArc(id: number, body: ArcPayload): Promise<ArcItem> 
 export async function deleteArc(id: number): Promise<void> {
   await http.delete(`/arcs/${id}`);
 }
+
+export function arcReadingStreamUrl(arcId: number): string {
+  return `/api/arcs/${arcId}/reading-stream`;
+}

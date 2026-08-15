@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { assetContentUrl } from '../../api/asset';
-import { getArc, type ArcItem } from '../../api/arc';
+import { arcReadingStreamUrl, getArc, type ArcItem } from '../../api/arc';
 import { listPages, type PageItem } from '../../api/page';
 import { getSeries } from '../../api/series';
 import PagePreview, { type PagePreviewItem } from '../pages/PagePreview.vue';
@@ -17,6 +17,13 @@ const arc = ref<ArcItem | null>(null);
 const pages = ref<PageItem[]>([]);
 const seriesName = ref('');
 const parsedByPageId = ref<Record<number, PagePreviewItem[]>>({});
+const readingStreamDialogVisible = ref(false);
+
+const readingStreamFullUrl = computed(() => {
+  const id = arcId.value;
+  if (!Number.isFinite(id) || id <= 0) return '';
+  return `${window.location.origin}${arcReadingStreamUrl(id)}`;
+});
 
 function apiError(e: unknown, fallback: string): string {
   const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -85,6 +92,25 @@ function headerTitle(): string {
     return `${seriesName.value} · ${arcTitle}`;
   }
   return arcTitle;
+}
+
+function openReadingStreamDialog() {
+  if (!readingStreamFullUrl.value) {
+    ElMessage.warning('无效的篇章 ID');
+    return;
+  }
+  readingStreamDialogVisible.value = true;
+}
+
+async function copyReadingStreamUrl() {
+  const url = readingStreamFullUrl.value;
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    ElMessage.success('链接已复制');
+  } catch {
+    ElMessage.error('复制失败，请手动复制');
+  }
 }
 
 function goBack() {
@@ -160,8 +186,24 @@ onMounted(() => {
         <el-button @click="goBack">返回</el-button>
         <h2>{{ headerTitle() }}</h2>
       </div>
-      <!-- AI 阅读流按钮：Task 3 -->
+      <el-button type="primary" plain :disabled="!arcId || arcId <= 0" @click="openReadingStreamDialog">
+        AI 阅读流
+      </el-button>
     </header>
+
+    <el-dialog v-model="readingStreamDialogVisible" title="AI 阅读流" width="560px">
+      <p class="dialog-label">接口 URL</p>
+      <el-input :model-value="readingStreamFullUrl" readonly type="textarea" :rows="2" />
+      <ul class="usage-list">
+        <li>需携带登录 Session（Cookie）访问，未登录返回 401。</li>
+        <li>按响应中 <code>segments</code> 数组顺序依次处理各段内容。</li>
+        <li>有 <code>text</code> 字段则读文本；<code>IMAGE</code> / <code>ARC_COVER</code> 等用登录态请求 <code>contentPath</code> 获取图片。</li>
+      </ul>
+      <template #footer>
+        <el-button @click="readingStreamDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="copyReadingStreamUrl">复制链接</el-button>
+      </template>
+    </el-dialog>
 
     <div v-loading="loading" class="reader">
       <img
@@ -255,5 +297,24 @@ onMounted(() => {
 }
 .page-title:first-of-type {
   margin-top: 28px;
+}
+.dialog-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5878;
+}
+.usage-list {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #4a5878;
+  line-height: 1.65;
+}
+.usage-list code {
+  font-size: 12px;
+  background: #eef1f7;
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 </style>
