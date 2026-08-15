@@ -227,6 +227,11 @@ function goPages(row: ArcItem) {
   void router.push(`/arcs/${row.id}/pages`);
 }
 
+function goPreview(row: ArcItem) {
+  if (row.id == null) return;
+  void router.push(`/arcs/${row.id}/preview`);
+}
+
 function goSeries() {
   void router.push('/series');
 }
@@ -312,10 +317,11 @@ onMounted(async () => {
         </template>
       </el-table-column>
       <el-table-column prop="summary" label="简介" min-width="180" show-overflow-tooltip />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
           <div class="row-actions">
             <el-button link type="primary" @click="goPages(row)">页面</el-button>
+            <el-button link type="primary" @click="goPreview(row)">预览</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </div>

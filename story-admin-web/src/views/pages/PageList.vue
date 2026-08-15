@@ -172,6 +172,12 @@ function goArcs() {
   void router.back();
 }
 
+function goArcPreview() {
+  const id = arcId.value;
+  if (!Number.isFinite(id) || id <= 0) return;
+  void router.push({ path: `/arcs/${id}/preview`, query: { from: 'pages' } });
+}
+
 async function move(row: PageItem, dir: -1 | 1) {
   if (row.id == null || reordering.value) return;
   const idx = allRows.value.findIndex((item) => item.id === row.id);
@@ -218,6 +224,7 @@ onMounted(async () => {
       </div>
       <div class="header-actions">
         <el-button @click="goArcs">返回篇章</el-button>
+        <el-button @click="goArcPreview">整篇预览</el-button>
         <el-button type="primary" @click="openCreate">新增页面</el-button>
       </div>
     </div>
