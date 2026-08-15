@@ -3,12 +3,15 @@ package com.story.admin.service;
 import com.story.admin.domain.AiReferenceItem;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetArcRel;
+import com.story.admin.domain.AssetArcRelId;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetLinkType;
 import com.story.admin.domain.AssetSeriesRel;
+import com.story.admin.domain.AssetSeriesRelId;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
+import com.story.admin.domain.AssetUnlinkedOrder;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.domain.StoryPage;
@@ -24,6 +27,7 @@ import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.AssetSeriesRelRepository;
 import com.story.admin.repository.AssetTagRelRepository;
 import com.story.admin.repository.AssetTagRepository;
+import com.story.admin.repository.AssetUnlinkedOrderRepository;
 import com.story.admin.repository.CharacterProfileRepository;
 import com.story.admin.repository.IdentityAssetRelRepository;
 import com.story.admin.repository.PageAssetRefRepository;
@@ -34,6 +38,8 @@ import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -68,6 +74,7 @@ public class AssetService {
   private final StoryPageRepository storyPageRepository;
   private final AssetSeriesRelRepository assetSeriesRelRepository;
   private final AssetArcRelRepository assetArcRelRepository;
+  private final AssetUnlinkedOrderRepository unlinkedOrderRepository;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -85,7 +92,8 @@ public class AssetService {
       PageAssetRefRepository pageAssetRefRepository,
       StoryPageRepository storyPageRepository,
       AssetSeriesRelRepository assetSeriesRelRepository,
-      AssetArcRelRepository assetArcRelRepository) {
+      AssetArcRelRepository assetArcRelRepository,
+      AssetUnlinkedOrderRepository unlinkedOrderRepository) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -102,6 +110,7 @@ public class AssetService {
     this.storyPageRepository = storyPageRepository;
     this.assetSeriesRelRepository = assetSeriesRelRepository;
     this.assetArcRelRepository = assetArcRelRepository;
+    this.unlinkedOrderRepository = unlinkedOrderRepository;
   }
 
   @Transactional
@@ -183,12 +192,15 @@ public class AssetService {
     String query = q == null ? "" : q.trim();
     String filter = normalizeCharacterFilter(characterFilter, characterId);
     String normalizedLinkType = normalizeLinkType(linkType);
-    return assetRepository
-        .search(
-            categoryId, parsed, query, filter, characterId, normalizedLinkType, seriesId, arcId)
-        .stream()
-        .map(this::hydrate)
-        .toList();
+    List<Asset> assets =
+        assetRepository
+            .search(
+                categoryId, parsed, query, filter, characterId, normalizedLinkType, seriesId, arcId)
+            .stream()
+            .map(this::hydrate)
+            .toList();
+    return applyScopeOrder(
+        assets, categoryId, filter, characterId, normalizedLinkType, seriesId, arcId);
   }
 
   public Asset get(Long id) {
@@ -304,6 +316,7 @@ public class AssetService {
     characterRelRepository.deleteByAssetId(id);
     assetSeriesRelRepository.deleteByAssetId(id);
     assetArcRelRepository.deleteByAssetId(id);
+    unlinkedOrderRepository.deleteByAssetId(id);
     String storagePath = asset.getStoragePath();
     assetRepository.delete(asset);
     storageService.deleteQuietly(storagePath);
@@ -408,10 +421,21 @@ public class AssetService {
             HttpStatus.BAD_REQUEST, "character not found: " + characterId);
       }
     }
+    Asset asset = getRaw(assetId);
     characterRelRepository.deleteByAssetId(assetId);
     characterRelRepository.flush();
     for (Long characterId : unique) {
-      characterRelRepository.save(new AssetCharacterRel(assetId, characterId));
+      int next =
+          characterRelRepository
+              .findMaxSortOrderByCharacterIdAndCategoryId(characterId, asset.getCategoryId())
+              .orElse(-1)
+              + 1;
+      characterRelRepository.save(new AssetCharacterRel(assetId, characterId, next));
+    }
+    if (unique.isEmpty()) {
+      ensureUnlinkedOrder(asset);
+    } else {
+      unlinkedOrderRepository.deleteByCategoryIdAndAssetId(asset.getCategoryId(), assetId);
     }
   }
 
@@ -472,18 +496,30 @@ public class AssetService {
   }
 
   private void writeSeriesLinks(Long assetId, LinkedHashSet<Long> seriesIds) {
+    Asset asset = getRaw(assetId);
     assetSeriesRelRepository.deleteByAssetId(assetId);
     assetSeriesRelRepository.flush();
     for (Long seriesId : seriesIds) {
-      assetSeriesRelRepository.save(new AssetSeriesRel(assetId, seriesId));
+      int next =
+          assetSeriesRelRepository
+              .findMaxSortOrderBySeriesIdAndCategoryId(seriesId, asset.getCategoryId())
+              .orElse(-1)
+              + 1;
+      assetSeriesRelRepository.save(new AssetSeriesRel(assetId, seriesId, next));
     }
   }
 
   private void writeArcLinks(Long assetId, LinkedHashSet<Long> arcIds) {
+    Asset asset = getRaw(assetId);
     assetArcRelRepository.deleteByAssetId(assetId);
     assetArcRelRepository.flush();
     for (Long arcId : arcIds) {
-      assetArcRelRepository.save(new AssetArcRel(assetId, arcId));
+      int next =
+          assetArcRelRepository
+              .findMaxSortOrderByArcIdAndCategoryId(arcId, asset.getCategoryId())
+              .orElse(-1)
+              + 1;
+      assetArcRelRepository.save(new AssetArcRel(assetId, arcId, next));
     }
   }
 
@@ -500,6 +536,108 @@ public class AssetService {
   private void clearCharacterLinks(Long assetId) {
     characterRelRepository.deleteByAssetId(assetId);
     characterRelRepository.flush();
+    if (characterRelRepository.findCharacterIdsByAssetId(assetId).isEmpty()) {
+      ensureUnlinkedOrder(getRaw(assetId));
+    }
+  }
+
+  private void ensureUnlinkedOrder(Asset asset) {
+    Long categoryId = asset.getCategoryId();
+    Long assetId = asset.getId();
+    var existing = unlinkedOrderRepository.findByCategoryIdAndAssetId(categoryId, assetId);
+    if (existing.isPresent()) {
+      return;
+    }
+    int next = unlinkedOrderRepository.findMaxSortOrderByCategoryId(categoryId).orElse(-1) + 1;
+    unlinkedOrderRepository.save(new AssetUnlinkedOrder(categoryId, assetId, next));
+  }
+
+  private List<Asset> applyScopeOrder(
+      List<Asset> assets,
+      Long categoryId,
+      String characterFilter,
+      Long characterId,
+      String linkType,
+      Long seriesId,
+      Long arcId) {
+    if (characterId != null) {
+      return sortByMap(assets, loadCharacterOrders(characterId, assets));
+    }
+    if ("unlinked".equals(characterFilter) && !hasConcreteSeriesOrArcFilter(linkType, seriesId, arcId)) {
+      return sortByMap(assets, loadUnlinkedOrders(categoryId, assets));
+    }
+    if (seriesId != null && "SERIES".equalsIgnoreCase(linkType)) {
+      return sortByMap(assets, loadSeriesOrders(seriesId, assets));
+    }
+    if (arcId != null && "ARC".equalsIgnoreCase(linkType)) {
+      return sortByMap(assets, loadArcOrders(arcId, assets));
+    }
+    return assets;
+  }
+
+  private static boolean hasConcreteSeriesOrArcFilter(String linkType, Long seriesId, Long arcId) {
+    if (seriesId != null && "SERIES".equalsIgnoreCase(linkType)) {
+      return true;
+    }
+    if (arcId != null && "ARC".equalsIgnoreCase(linkType)) {
+      return true;
+    }
+    return false;
+  }
+
+  private List<Asset> sortByMap(List<Asset> assets, Map<Long, Integer> scopeOrder) {
+    return assets.stream()
+        .sorted(
+            Comparator.comparingInt(
+                    (Asset a) -> scopeOrder.getOrDefault(a.getId(), a.getSortOrder()))
+                .thenComparingLong(Asset::getId))
+        .toList();
+  }
+
+  private Map<Long, Integer> loadCharacterOrders(Long characterId, List<Asset> assets) {
+    Set<Long> ids = assets.stream().map(Asset::getId).collect(Collectors.toSet());
+    Map<Long, Integer> map = new HashMap<>();
+    for (AssetCharacterRel rel : characterRelRepository.findByCharacterId(characterId)) {
+      if (ids.contains(rel.getAssetId())) {
+        map.put(rel.getAssetId(), rel.getSortOrder());
+      }
+    }
+    return map;
+  }
+
+  private Map<Long, Integer> loadUnlinkedOrders(Long categoryId, List<Asset> assets) {
+    if (categoryId == null) {
+      return Map.of();
+    }
+    Set<Long> ids = assets.stream().map(Asset::getId).collect(Collectors.toSet());
+    Map<Long, Integer> map = new HashMap<>();
+    for (AssetUnlinkedOrder order :
+        unlinkedOrderRepository.findByCategoryIdOrderBySortOrderAscAssetIdAsc(categoryId)) {
+      if (ids.contains(order.getAssetId())) {
+        map.put(order.getAssetId(), order.getSortOrder());
+      }
+    }
+    return map;
+  }
+
+  private Map<Long, Integer> loadSeriesOrders(Long seriesId, List<Asset> assets) {
+    Map<Long, Integer> map = new HashMap<>();
+    for (Asset asset : assets) {
+      assetSeriesRelRepository
+          .findById(new AssetSeriesRelId(asset.getId(), seriesId))
+          .ifPresent(rel -> map.put(asset.getId(), rel.getSortOrder()));
+    }
+    return map;
+  }
+
+  private Map<Long, Integer> loadArcOrders(Long arcId, List<Asset> assets) {
+    Map<Long, Integer> map = new HashMap<>();
+    for (Asset asset : assets) {
+      assetArcRelRepository
+          .findById(new AssetArcRelId(asset.getId(), arcId))
+          .ifPresent(rel -> map.put(asset.getId(), rel.getSortOrder()));
+    }
+    return map;
   }
 
   private Asset getRaw(Long id) {
