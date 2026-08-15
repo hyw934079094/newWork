@@ -171,6 +171,7 @@ async function onThumbsChange(evt: DragChangeEvent) {
     restoreDragSnapshot();
     return;
   }
+  await nextTick();
   try {
     const orderedIds = assets.value.map((item) => item.id);
     if (scope == null) {
@@ -186,6 +187,7 @@ async function onThumbsChange(evt: DragChangeEvent) {
         orderedIds,
       });
     }
+    await loadAssets(selectedAssetId.value);
   } catch (e) {
     restoreDragSnapshot();
     ElMessage.error(apiError(e, '排序失败'));
@@ -255,6 +257,15 @@ type PersistSortScope =
   | 'none'
   | { scope: 'CHARACTER' | 'SERIES' | 'ARC' | 'UNLINKED'; scopeId?: number };
 
+function asFilterId(value: number | '' | string | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 /** 可持久化的 scope；null = 用分类全局 reorder；'none' = 禁止持久化改序 */
 const persistSortScope = computed((): PersistSortScope => {
   // NONE 筛选集 ≠ 服务端 UNLINKED/CHARACTER 集合，禁止持久化改序
@@ -262,14 +273,16 @@ const persistSortScope = computed((): PersistSortScope => {
     return 'none';
   }
   if (linkTypeFilter.value === 'SERIES') {
-    if (typeof filterSeriesId.value === 'number') {
-      return { scope: 'SERIES', scopeId: filterSeriesId.value };
+    const sid = asFilterId(filterSeriesId.value);
+    if (sid != null) {
+      return { scope: 'SERIES', scopeId: sid };
     }
     return 'none';
   }
   if (linkTypeFilter.value === 'ARC') {
-    if (typeof filterArcId.value === 'number') {
-      return { scope: 'ARC', scopeId: filterArcId.value };
+    const aid = asFilterId(filterArcId.value);
+    if (aid != null) {
+      return { scope: 'ARC', scopeId: aid };
     }
     return 'none';
   }
@@ -368,14 +381,16 @@ async function loadAssets(keepId?: number | null) {
     if (linkTypeFilter.value) {
       listParams.linkType = linkTypeFilter.value;
     }
+    const seriesId = asFilterId(filterSeriesId.value);
+    const arcId = asFilterId(filterArcId.value);
     if (
       (linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC') &&
-      typeof filterSeriesId.value === 'number'
+      seriesId != null
     ) {
-      listParams.seriesId = filterSeriesId.value;
+      listParams.seriesId = seriesId;
     }
-    if (linkTypeFilter.value === 'ARC' && typeof filterArcId.value === 'number') {
-      listParams.arcId = filterArcId.value;
+    if (linkTypeFilter.value === 'ARC' && arcId != null) {
+      listParams.arcId = arcId;
     }
     if (showCharacterFilter.value) {
       if (typeof characterFilter.value === 'number') {
@@ -502,11 +517,13 @@ function uploadLinkFromFilters(): {
   if (linkTypeFilter.value === 'CHARACTER' && typeof characterFilter.value === 'number') {
     return { linkType: 'CHARACTER', characterIds: [characterFilter.value] };
   }
-  if (linkTypeFilter.value === 'SERIES' && typeof filterSeriesId.value === 'number') {
-    return { linkType: 'SERIES', seriesIds: [filterSeriesId.value] };
+  const seriesId = asFilterId(filterSeriesId.value);
+  const arcId = asFilterId(filterArcId.value);
+  if (linkTypeFilter.value === 'SERIES' && seriesId != null) {
+    return { linkType: 'SERIES', seriesIds: [seriesId] };
   }
-  if (linkTypeFilter.value === 'ARC' && typeof filterArcId.value === 'number') {
-    return { linkType: 'ARC', arcIds: [filterArcId.value] };
+  if (linkTypeFilter.value === 'ARC' && arcId != null) {
+    return { linkType: 'ARC', arcIds: [arcId] };
   }
   return undefined;
 }

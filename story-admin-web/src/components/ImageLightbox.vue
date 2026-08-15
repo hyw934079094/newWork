@@ -13,19 +13,34 @@ const emit = defineEmits<{
 
 const slots = useSlots();
 const scale = ref(1);
+const offsetX = ref(0);
+const offsetY = ref(0);
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const STEP = 0.12;
+
+let panning = false;
+let panMoved = false;
+let panStartX = 0;
+let panStartY = 0;
+let panOriginX = 0;
+let panOriginY = 0;
 
 const visible = computed({
   get: () => props.modelValue && !!props.src,
   set: (v: boolean) => emit('update:modelValue', v),
 });
 
+function resetView() {
+  scale.value = 1;
+  offsetX.value = 0;
+  offsetY.value = 0;
+}
+
 watch(
   () => [props.modelValue, props.src] as const,
   () => {
-    scale.value = 1;
+    resetView();
   },
 );
 
@@ -37,6 +52,45 @@ function onWheel(ev: WheelEvent) {
   ev.preventDefault();
   const delta = ev.deltaY > 0 ? -STEP : STEP;
   scale.value = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale.value + delta));
+}
+
+function onPointerDown(ev: PointerEvent) {
+  if (ev.button !== 0) return;
+  panning = true;
+  panMoved = false;
+  panStartX = ev.clientX;
+  panStartY = ev.clientY;
+  panOriginX = offsetX.value;
+  panOriginY = offsetY.value;
+  (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+}
+
+function onPointerMove(ev: PointerEvent) {
+  if (!panning) return;
+  const dx = ev.clientX - panStartX;
+  const dy = ev.clientY - panStartY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    panMoved = true;
+  }
+  offsetX.value = panOriginX + dx;
+  offsetY.value = panOriginY + dy;
+}
+
+function onPointerUp(ev: PointerEvent) {
+  if (!panning) return;
+  panning = false;
+  try {
+    (ev.currentTarget as HTMLElement).releasePointerCapture(ev.pointerId);
+  } catch {
+    // ignore
+  }
+}
+
+function onImgClick(ev: MouseEvent) {
+  ev.stopPropagation();
+  if (panMoved) {
+    panMoved = false;
+  }
 }
 </script>
 
@@ -52,10 +106,16 @@ function onWheel(ev: WheelEvent) {
     >
       <img
         class="image-lightbox-img"
+        :class="{ panning }"
         :src="src"
         :alt="alt || ''"
-        :style="{ transform: `scale(${scale})` }"
-        @click.stop
+        :style="{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})` }"
+        draggable="false"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+        @click="onImgClick"
       />
       <div v-if="slots.chrome" class="image-lightbox-chrome" @click.stop>
         <slot name="chrome" />
@@ -84,11 +144,16 @@ function onWheel(ev: WheelEvent) {
   border-radius: 10px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   background: #111827;
-  cursor: default;
+  cursor: grab;
   transform-origin: center center;
   transition: transform 0.05s linear;
   user-select: none;
   -webkit-user-drag: none;
+  touch-action: none;
+}
+.image-lightbox-img.panning {
+  cursor: grabbing;
+  transition: none;
 }
 .image-lightbox-chrome {
   position: absolute;

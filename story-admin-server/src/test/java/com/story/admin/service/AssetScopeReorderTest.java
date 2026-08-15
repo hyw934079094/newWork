@@ -10,6 +10,7 @@ import com.story.admin.domain.AssetArcRelId;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetCharacterRelId;
+import com.story.admin.domain.AssetLinkType;
 import com.story.admin.domain.AssetSeriesRel;
 import com.story.admin.domain.AssetSeriesRelId;
 import com.story.admin.domain.AssetUnlinkedOrder;
@@ -18,6 +19,7 @@ import com.story.admin.domain.CharacterProfile;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.domain.StorySeries;
 import com.story.admin.dto.ArcCreateRequest;
+import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
 import com.story.admin.repository.AssetArcRelRepository;
@@ -263,6 +265,44 @@ class AssetScopeReorderTest {
     assertThat(byAll)
         .extracting(Asset::getId)
         .containsExactly(assetA.getId(), assetB.getId(), assetC.getId());
+  }
+
+  @Test
+  void updateArcLinkPreservesScopeSortOrder() {
+    Long categoryId = persistCategory("scope-preserve-arc", "篇章保序分类").getId();
+    Asset assetA = persistAsset(categoryId, "A", 0);
+    Asset assetB = persistAsset(categoryId, "B", 1);
+    Asset assetC = persistAsset(categoryId, "C", 2);
+    StorySeries series =
+        seriesService.create(new SeriesCreateRequest("保序系列", null, null, null, null));
+    StoryArc arc = arcService.create(series.getId(), new ArcCreateRequest("保序篇章", null, null, null));
+
+    arcRelRepository.save(new AssetArcRel(assetA.getId(), arc.getId(), 0));
+    arcRelRepository.save(new AssetArcRel(assetB.getId(), arc.getId(), 1));
+    arcRelRepository.save(new AssetArcRel(assetC.getId(), arc.getId(), 2));
+
+    assetService.reorderByScope(
+        categoryId, "ARC", arc.getId(), List.of(assetC.getId(), assetB.getId(), assetA.getId()));
+
+    assetService.update(
+        assetC.getId(),
+        AssetUpdateRequest.builder()
+            .displayName("C-renamed")
+            .linkType(AssetLinkType.ARC)
+            .arcIds(List.of(arc.getId()))
+            .build());
+
+    List<Asset> byArc =
+        assetService.list(categoryId, "NORMAL", null, null, null, "ARC", null, arc.getId());
+    assertThat(byArc)
+        .extracting(Asset::getId)
+        .containsExactly(assetC.getId(), assetB.getId(), assetA.getId());
+    assertThat(
+            arcRelRepository
+                .findById(new AssetArcRelId(assetC.getId(), arc.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(0);
   }
 
   @Test

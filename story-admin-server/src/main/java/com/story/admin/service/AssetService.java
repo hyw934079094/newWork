@@ -582,14 +582,23 @@ public class AssetService {
       }
     }
     Asset asset = getRaw(assetId);
+    Map<Long, Integer> preserved = new HashMap<>();
+    for (Long characterId : characterRelRepository.findCharacterIdsByAssetId(assetId)) {
+      characterRelRepository
+          .findById(new AssetCharacterRelId(assetId, characterId))
+          .ifPresent(rel -> preserved.put(characterId, rel.getSortOrder()));
+    }
     characterRelRepository.deleteByAssetId(assetId);
     characterRelRepository.flush();
     for (Long characterId : unique) {
       int next =
-          characterRelRepository
-              .findMaxSortOrderByCharacterIdAndCategoryId(characterId, asset.getCategoryId())
-              .orElse(-1)
-              + 1;
+          preserved.containsKey(characterId)
+              ? preserved.get(characterId)
+              : characterRelRepository
+                      .findMaxSortOrderByCharacterIdAndCategoryId(
+                          characterId, asset.getCategoryId())
+                      .orElse(-1)
+                  + 1;
       characterRelRepository.save(new AssetCharacterRel(assetId, characterId, next));
     }
     if (unique.isEmpty()) {
@@ -657,28 +666,44 @@ public class AssetService {
 
   private void writeSeriesLinks(Long assetId, LinkedHashSet<Long> seriesIds) {
     Asset asset = getRaw(assetId);
+    Map<Long, Integer> preserved = new HashMap<>();
+    for (Long seriesId : assetSeriesRelRepository.findSeriesIdsByAssetId(assetId)) {
+      assetSeriesRelRepository
+          .findById(new AssetSeriesRelId(assetId, seriesId))
+          .ifPresent(rel -> preserved.put(seriesId, rel.getSortOrder()));
+    }
     assetSeriesRelRepository.deleteByAssetId(assetId);
     assetSeriesRelRepository.flush();
     for (Long seriesId : seriesIds) {
       int next =
-          assetSeriesRelRepository
-              .findMaxSortOrderBySeriesIdAndCategoryId(seriesId, asset.getCategoryId())
-              .orElse(-1)
-              + 1;
+          preserved.containsKey(seriesId)
+              ? preserved.get(seriesId)
+              : assetSeriesRelRepository
+                      .findMaxSortOrderBySeriesIdAndCategoryId(seriesId, asset.getCategoryId())
+                      .orElse(-1)
+                  + 1;
       assetSeriesRelRepository.save(new AssetSeriesRel(assetId, seriesId, next));
     }
   }
 
   private void writeArcLinks(Long assetId, LinkedHashSet<Long> arcIds) {
     Asset asset = getRaw(assetId);
+    Map<Long, Integer> preserved = new HashMap<>();
+    for (Long arcId : assetArcRelRepository.findArcIdsByAssetId(assetId)) {
+      assetArcRelRepository
+          .findById(new AssetArcRelId(assetId, arcId))
+          .ifPresent(rel -> preserved.put(arcId, rel.getSortOrder()));
+    }
     assetArcRelRepository.deleteByAssetId(assetId);
     assetArcRelRepository.flush();
     for (Long arcId : arcIds) {
       int next =
-          assetArcRelRepository
-              .findMaxSortOrderByArcIdAndCategoryId(arcId, asset.getCategoryId())
-              .orElse(-1)
-              + 1;
+          preserved.containsKey(arcId)
+              ? preserved.get(arcId)
+              : assetArcRelRepository
+                      .findMaxSortOrderByArcIdAndCategoryId(arcId, asset.getCategoryId())
+                      .orElse(-1)
+                  + 1;
       assetArcRelRepository.save(new AssetArcRel(assetId, arcId, next));
     }
   }
