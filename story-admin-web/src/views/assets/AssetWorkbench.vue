@@ -191,6 +191,10 @@ type PersistSortScope =
 
 /** 可持久化的 scope；null = 用分类全局 reorder；'none' = 禁止持久化改序 */
 const persistSortScope = computed((): PersistSortScope => {
+  // NONE 筛选集 ≠ 服务端 UNLINKED/CHARACTER 集合，禁止持久化改序
+  if (linkTypeFilter.value === 'NONE') {
+    return 'none';
+  }
   if (linkTypeFilter.value === 'SERIES') {
     if (typeof filterSeriesId.value === 'number') {
       return { scope: 'SERIES', scopeId: filterSeriesId.value };
