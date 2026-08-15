@@ -19,11 +19,19 @@ public class AssetSeriesRel {
   @Column(name = "series_id", nullable = false)
   private Long seriesId;
 
+  @Column(name = "sort_order", nullable = false)
+  private int sortOrder;
+
   public AssetSeriesRel() {}
 
   public AssetSeriesRel(Long assetId, Long seriesId) {
+    this(assetId, seriesId, 0);
+  }
+
+  public AssetSeriesRel(Long assetId, Long seriesId, int sortOrder) {
     this.assetId = assetId;
     this.seriesId = seriesId;
+    this.sortOrder = sortOrder;
   }
 
   public Long getAssetId() {
@@ -40,5 +48,13 @@ public class AssetSeriesRel {
 
   public void setSeriesId(Long seriesId) {
     this.seriesId = seriesId;
+  }
+
+  public int getSortOrder() {
+    return sortOrder;
+  }
+
+  public void setSortOrder(int sortOrder) {
+    this.sortOrder = sortOrder;
   }
 }

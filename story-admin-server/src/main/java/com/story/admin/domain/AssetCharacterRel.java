@@ -19,11 +19,19 @@ public class AssetCharacterRel {
   @Column(name = "character_id", nullable = false)
   private Long characterId;
 
+  @Column(name = "sort_order", nullable = false)
+  private int sortOrder;
+
   public AssetCharacterRel() {}
 
   public AssetCharacterRel(Long assetId, Long characterId) {
+    this(assetId, characterId, 0);
+  }
+
+  public AssetCharacterRel(Long assetId, Long characterId, int sortOrder) {
     this.assetId = assetId;
     this.characterId = characterId;
+    this.sortOrder = sortOrder;
   }
 
   public Long getAssetId() {
@@ -40,5 +48,13 @@ public class AssetCharacterRel {
 
   public void setCharacterId(Long characterId) {
     this.characterId = characterId;
+  }
+
+  public int getSortOrder() {
+    return sortOrder;
+  }
+
+  public void setSortOrder(int sortOrder) {
+    this.sortOrder = sortOrder;
   }
 }

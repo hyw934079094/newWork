@@ -3,6 +3,7 @@ package com.story.admin.repository;
 import com.story.admin.domain.AssetSeriesRel;
 import com.story.admin.domain.AssetSeriesRelId;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,4 +24,12 @@ public interface AssetSeriesRelRepository extends JpaRepository<AssetSeriesRel, 
       order by s.name
       """)
   List<String> findSeriesNamesByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select coalesce(max(r.sortOrder), -1) from AssetSeriesRel r, Asset a
+      where r.assetId = a.id and r.seriesId = :seriesId and a.categoryId = :categoryId
+      """)
+  Optional<Integer> findMaxSortOrderBySeriesIdAndCategoryId(
+      @Param("seriesId") Long seriesId, @Param("categoryId") Long categoryId);
 }

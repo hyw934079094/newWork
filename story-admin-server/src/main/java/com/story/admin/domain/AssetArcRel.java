@@ -19,11 +19,19 @@ public class AssetArcRel {
   @Column(name = "arc_id", nullable = false)
   private Long arcId;
 
+  @Column(name = "sort_order", nullable = false)
+  private int sortOrder;
+
   public AssetArcRel() {}
 
   public AssetArcRel(Long assetId, Long arcId) {
+    this(assetId, arcId, 0);
+  }
+
+  public AssetArcRel(Long assetId, Long arcId, int sortOrder) {
     this.assetId = assetId;
     this.arcId = arcId;
+    this.sortOrder = sortOrder;
   }
 
   public Long getAssetId() {
@@ -40,5 +48,13 @@ public class AssetArcRel {
 
   public void setArcId(Long arcId) {
     this.arcId = arcId;
+  }
+
+  public int getSortOrder() {
+    return sortOrder;
+  }
+
+  public void setSortOrder(int sortOrder) {
+    this.sortOrder = sortOrder;
   }
 }
