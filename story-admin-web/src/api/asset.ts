@@ -112,6 +112,15 @@ export async function reorderAssets(body: {
   await http.put('/assets/reorder', body);
 }
 
+export async function reorderAssetsByScope(body: {
+  categoryId: number;
+  scope: 'CHARACTER' | 'SERIES' | 'ARC' | 'UNLINKED';
+  scopeId?: number | null;
+  orderedIds: number[];
+}): Promise<void> {
+  await http.put('/assets/reorder-by-scope', body);
+}
+
 export async function moveAsset(
   id: number,
   body: { targetCategoryId: number; targetIndex: number },

@@ -8,6 +8,7 @@ import {
   moveAsset,
   recycleAsset,
   reorderAssets,
+  reorderAssetsByScope,
   replaceAssetContent,
   updateAsset,
   uploadAssets,
@@ -95,15 +96,30 @@ function onDragEnd() {
 
 async function onThumbsChange(evt: DragChangeEvent) {
   if (!evt.moved || selectedCategoryId.value == null) return;
-  if (isSearchActive.value) {
+  if (hasKeyword.value) {
+    // 搜索中仅内存顺序，不调 API
+    return;
+  }
+  const scope = persistSortScope.value;
+  if (scope === 'none') {
     restoreDragSnapshot();
     return;
   }
   try {
-    await reorderAssets({
-      categoryId: selectedCategoryId.value,
-      orderedIds: assets.value.map((item) => item.id),
-    });
+    const orderedIds = assets.value.map((item) => item.id);
+    if (scope == null) {
+      await reorderAssets({
+        categoryId: selectedCategoryId.value,
+        orderedIds,
+      });
+    } else {
+      await reorderAssetsByScope({
+        categoryId: selectedCategoryId.value,
+        scope: scope.scope,
+        scopeId: scope.scopeId,
+        orderedIds,
+      });
+    }
   } catch (e) {
     restoreDragSnapshot();
     ElMessage.error(apiError(e, '排序失败'));
@@ -166,13 +182,67 @@ const showArcFilter = computed(() => linkTypeFilter.value === 'ARC');
 const showCharacterFilter = computed(
   () => linkTypeFilter.value === '' || linkTypeFilter.value === 'CHARACTER',
 );
-/** q 非空或筛选不是完整分类列表时禁用本分类内排序 */
-const isSearchActive = computed(
-  () =>
-    search.value.trim().length > 0 ||
-    linkTypeFilter.value !== '' ||
-    (showCharacterFilter.value && characterFilter.value !== 'all'),
-);
+const hasKeyword = computed(() => search.value.trim().length > 0);
+
+type PersistSortScope =
+  | null
+  | 'none'
+  | { scope: 'CHARACTER' | 'SERIES' | 'ARC' | 'UNLINKED'; scopeId?: number };
+
+/** 可持久化的 scope；null = 用分类全局 reorder；'none' = 禁止持久化改序 */
+const persistSortScope = computed((): PersistSortScope => {
+  if (linkTypeFilter.value === 'SERIES') {
+    if (typeof filterSeriesId.value === 'number') {
+      return { scope: 'SERIES', scopeId: filterSeriesId.value };
+    }
+    return 'none';
+  }
+  if (linkTypeFilter.value === 'ARC') {
+    if (typeof filterArcId.value === 'number') {
+      return { scope: 'ARC', scopeId: filterArcId.value };
+    }
+    return 'none';
+  }
+  if (typeof characterFilter.value === 'number') {
+    return { scope: 'CHARACTER', scopeId: characterFilter.value };
+  }
+  if (characterFilter.value === 'unlinked') {
+    return { scope: 'UNLINKED' };
+  }
+  if (characterFilter.value === 'all' && linkTypeFilter.value === '') {
+    return null;
+  }
+  if (characterFilter.value === 'all' && linkTypeFilter.value === 'CHARACTER') {
+    return 'none';
+  }
+  return 'none';
+});
+
+const canSortThumbs = computed(() => {
+  if (hasKeyword.value) return true;
+  return persistSortScope.value !== 'none';
+});
+
+const reorderHint = computed(() => {
+  if (hasKeyword.value) {
+    return '搜索中顺序仅临时，刷新后恢复；仍可拖到左侧其它分类';
+  }
+  const scope = persistSortScope.value;
+  if (scope === 'none') {
+    return '当前筛选未选具体目标，本分类内排序暂不可用，仍可拖到左侧其它分类';
+  }
+  if (scope == null) return '';
+  if (scope.scope === 'CHARACTER') {
+    return '当前按人物顺序排列，拖拽将保存到该人物';
+  }
+  if (scope.scope === 'SERIES' || scope.scope === 'ARC') {
+    return '当前按系列/篇章顺序排列，拖拽将保存到该筛选';
+  }
+  if (scope.scope === 'UNLINKED') {
+    return '当前按「无关联」顺序排列，拖拽将保存到本分类无关联视图';
+  }
+  return '';
+});
 
 function apiError(e: unknown, fallback: string): string {
   const err = e as { response?: { data?: { message?: string } } };
@@ -735,16 +805,16 @@ onMounted(async () => {
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
         <p class="drag-tip">
-          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可排序（关联筛选为全部、人物选「全部」且无搜索时）。
+          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可按当前筛选范围排序并保存。
         </p>
-        <p v-if="isSearchActive" class="search-reorder-hint">
-          当前关联筛选或搜索已开启：本分类内排序暂不可用，仍可拖到左侧其它分类。
+        <p v-if="reorderHint" class="search-reorder-hint">
+          {{ reorderHint }}
         </p>
         <draggable
           v-model="assets"
           item-key="id"
           :group="thumbGroup"
-          :sort="!isSearchActive"
+          :sort="canSortThumbs"
           :animation="150"
           class="thumbs"
           ghost-class="thumb-ghost"
