@@ -5,14 +5,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
+import com.story.admin.domain.AssetArcRel;
+import com.story.admin.domain.AssetArcRelId;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetCharacterRelId;
+import com.story.admin.domain.AssetSeriesRel;
+import com.story.admin.domain.AssetSeriesRelId;
+import com.story.admin.domain.AssetUnlinkedOrder;
+import com.story.admin.domain.AssetUnlinkedOrderId;
 import com.story.admin.domain.CharacterProfile;
+import com.story.admin.domain.StoryArc;
+import com.story.admin.domain.StorySeries;
+import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
+import com.story.admin.dto.SeriesCreateRequest;
+import com.story.admin.repository.AssetArcRelRepository;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.AssetSeriesRelRepository;
+import com.story.admin.repository.AssetUnlinkedOrderRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,9 +54,14 @@ class AssetScopeReorderTest {
 
   @Autowired AssetService assetService;
   @Autowired CharacterService characterService;
+  @Autowired SeriesService seriesService;
+  @Autowired ArcService arcService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
   @Autowired AssetCharacterRelRepository characterRelRepository;
+  @Autowired AssetSeriesRelRepository seriesRelRepository;
+  @Autowired AssetArcRelRepository arcRelRepository;
+  @Autowired AssetUnlinkedOrderRepository unlinkedOrderRepository;
 
   @Test
   void listByCharacterUsesRelSortOrderNotAssetSortOrder() {
@@ -142,6 +160,157 @@ class AssetScopeReorderTest {
               ResponseStatusException rse = (ResponseStatusException) ex;
               assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
             });
+  }
+
+  @Test
+  void reorderBySeriesDoesNotChangeAssetSortOrder() {
+    Long categoryId = persistCategory("scope-reorder-series", "系列改序分类").getId();
+    Asset assetA = persistAsset(categoryId, "A", 0);
+    Asset assetB = persistAsset(categoryId, "B", 1);
+    Asset assetC = persistAsset(categoryId, "C", 2);
+    StorySeries series =
+        seriesService.create(new SeriesCreateRequest("改序系列", null, null, null, null));
+
+    seriesRelRepository.save(new AssetSeriesRel(assetA.getId(), series.getId(), 0));
+    seriesRelRepository.save(new AssetSeriesRel(assetB.getId(), series.getId(), 1));
+    seriesRelRepository.save(new AssetSeriesRel(assetC.getId(), series.getId(), 2));
+
+    List<Long> reversed = List.of(assetC.getId(), assetB.getId(), assetA.getId());
+    assetService.reorderByScope(categoryId, "SERIES", series.getId(), reversed);
+
+    assertThat(
+            seriesRelRepository
+                .findById(new AssetSeriesRelId(assetC.getId(), series.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(0);
+    assertThat(
+            seriesRelRepository
+                .findById(new AssetSeriesRelId(assetB.getId(), series.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(1);
+    assertThat(
+            seriesRelRepository
+                .findById(new AssetSeriesRelId(assetA.getId(), series.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(2);
+
+    assertThat(assetRepository.findById(assetA.getId()).orElseThrow().getSortOrder()).isEqualTo(0);
+    assertThat(assetRepository.findById(assetB.getId()).orElseThrow().getSortOrder()).isEqualTo(1);
+    assertThat(assetRepository.findById(assetC.getId()).orElseThrow().getSortOrder()).isEqualTo(2);
+
+    List<Asset> bySeries =
+        assetService.list(categoryId, "NORMAL", null, null, null, "SERIES", series.getId(), null);
+    assertThat(bySeries)
+        .extracting(Asset::getId)
+        .containsExactly(assetC.getId(), assetB.getId(), assetA.getId());
+
+    List<Asset> byAll = assetService.list(categoryId, "NORMAL", null, "all", null);
+    assertThat(byAll)
+        .extracting(Asset::getId)
+        .containsExactly(assetA.getId(), assetB.getId(), assetC.getId());
+  }
+
+  @Test
+  void reorderByArcDoesNotChangeAssetSortOrder() {
+    Long categoryId = persistCategory("scope-reorder-arc", "篇章改序分类").getId();
+    Asset assetA = persistAsset(categoryId, "A", 0);
+    Asset assetB = persistAsset(categoryId, "B", 1);
+    Asset assetC = persistAsset(categoryId, "C", 2);
+    StorySeries series =
+        seriesService.create(new SeriesCreateRequest("篇章所属系列", null, null, null, null));
+    StoryArc arc = arcService.create(series.getId(), new ArcCreateRequest("改序篇章", null, null, null));
+
+    arcRelRepository.save(new AssetArcRel(assetA.getId(), arc.getId(), 0));
+    arcRelRepository.save(new AssetArcRel(assetB.getId(), arc.getId(), 1));
+    arcRelRepository.save(new AssetArcRel(assetC.getId(), arc.getId(), 2));
+
+    List<Long> reversed = List.of(assetC.getId(), assetB.getId(), assetA.getId());
+    assetService.reorderByScope(categoryId, "ARC", arc.getId(), reversed);
+
+    assertThat(
+            arcRelRepository
+                .findById(new AssetArcRelId(assetC.getId(), arc.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(0);
+    assertThat(
+            arcRelRepository
+                .findById(new AssetArcRelId(assetB.getId(), arc.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(1);
+    assertThat(
+            arcRelRepository
+                .findById(new AssetArcRelId(assetA.getId(), arc.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(2);
+
+    assertThat(assetRepository.findById(assetA.getId()).orElseThrow().getSortOrder()).isEqualTo(0);
+    assertThat(assetRepository.findById(assetB.getId()).orElseThrow().getSortOrder()).isEqualTo(1);
+    assertThat(assetRepository.findById(assetC.getId()).orElseThrow().getSortOrder()).isEqualTo(2);
+
+    List<Asset> byArc =
+        assetService.list(categoryId, "NORMAL", null, null, null, "ARC", null, arc.getId());
+    assertThat(byArc)
+        .extracting(Asset::getId)
+        .containsExactly(assetC.getId(), assetB.getId(), assetA.getId());
+
+    List<Asset> byAll = assetService.list(categoryId, "NORMAL", null, "all", null);
+    assertThat(byAll)
+        .extracting(Asset::getId)
+        .containsExactly(assetA.getId(), assetB.getId(), assetC.getId());
+  }
+
+  @Test
+  void reorderByUnlinkedDoesNotChangeAssetSortOrder() {
+    Long categoryId = persistCategory("scope-reorder-unlinked", "无关联改序分类").getId();
+    Asset assetA = persistAsset(categoryId, "A", 0);
+    Asset assetB = persistAsset(categoryId, "B", 1);
+    Asset assetC = persistAsset(categoryId, "C", 2);
+
+    unlinkedOrderRepository.save(new AssetUnlinkedOrder(categoryId, assetA.getId(), 0));
+    unlinkedOrderRepository.save(new AssetUnlinkedOrder(categoryId, assetB.getId(), 1));
+    unlinkedOrderRepository.save(new AssetUnlinkedOrder(categoryId, assetC.getId(), 2));
+
+    List<Long> reversed = List.of(assetC.getId(), assetB.getId(), assetA.getId());
+    assetService.reorderByScope(categoryId, "UNLINKED", null, reversed);
+
+    assertThat(
+            unlinkedOrderRepository
+                .findById(new AssetUnlinkedOrderId(categoryId, assetC.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(0);
+    assertThat(
+            unlinkedOrderRepository
+                .findById(new AssetUnlinkedOrderId(categoryId, assetB.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(1);
+    assertThat(
+            unlinkedOrderRepository
+                .findById(new AssetUnlinkedOrderId(categoryId, assetA.getId()))
+                .orElseThrow()
+                .getSortOrder())
+        .isEqualTo(2);
+
+    assertThat(assetRepository.findById(assetA.getId()).orElseThrow().getSortOrder()).isEqualTo(0);
+    assertThat(assetRepository.findById(assetB.getId()).orElseThrow().getSortOrder()).isEqualTo(1);
+    assertThat(assetRepository.findById(assetC.getId()).orElseThrow().getSortOrder()).isEqualTo(2);
+
+    List<Asset> byUnlinked = assetService.list(categoryId, "NORMAL", null, "unlinked", null);
+    assertThat(byUnlinked)
+        .extracting(Asset::getId)
+        .containsExactly(assetC.getId(), assetB.getId(), assetA.getId());
+
+    List<Asset> byAll = assetService.list(categoryId, "NORMAL", null, "all", null);
+    assertThat(byAll)
+        .extracting(Asset::getId)
+        .containsExactly(assetA.getId(), assetB.getId(), assetC.getId());
   }
 
   private AssetCategory persistCategory(String code, String name) {

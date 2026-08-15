@@ -17,7 +17,7 @@
 |---|------|------|------|
 | 1 | 全部+无关键字改序刷新正确 | **PARTIAL** | `AssetReorderTest#reorderUpdatesSortOrder` PASS；浏览器刷新点验 **NOT TESTED** |
 | 2 | 人物 scope 改序不影响 asset.sortOrder | **PASS** | `AssetScopeReorderTest#reorderByCharacterDoesNotChangeAssetSortOrder`、`#listByCharacterUsesRelSortOrderNotAssetSortOrder` |
-| 3 | 无关联/系列/篇章同理 | **PARTIAL** | `AssetService.reorderByScope` 已实现 SERIES/ARC/UNLINKED；单测仅覆盖 CHARACTER |
+| 3 | 无关联/系列/篇章同理 | **PASS** | `AssetScopeReorderTest#reorderBySeriesDoesNotChangeAssetSortOrder`、`#reorderByArcDoesNotChangeAssetSortOrder`、`#reorderByUnlinkedDoesNotChangeAssetSortOrder` |
 | 4 | 关键字临时拖，刷新恢复 | **PARTIAL** | `AssetWorkbench.vue`：`hasKeyword` 时 `onThumbsChange` 不调 API；浏览器拖/刷新 **NOT TESTED** |
 | 5 | 跨分类仍可用 | **PASS** | `AssetReorderTest#moveUpdatesCategoryAndSortOrderWithoutCopyingFile`；UI `moveAsset` 路径未改 |
 | 6 | ids 不匹配 400 + UI 回滚 | **PARTIAL** | `AssetScopeReorderTest#reorderByScopeRejectsMismatchedIds` → 400 PASS；UI `catch` 调 `restoreDragSnapshot()`，浏览器点验 **NOT TESTED** |
@@ -26,5 +26,5 @@
 
 | 命令 | 结果 |
 |------|------|
-| `JAVA_HOME=D:\jdk\jdk-24.0.1 mvn "-Dtest=AssetScopeReorderTest,AssetReorderTest" test`（story-admin-server） | **PASS** — Tests run: 5, Failures: 0, Errors: 0 |
+| `JAVA_HOME=D:\jdk\jdk-24.0.1 mvn "-Dtest=AssetScopeReorderTest,AssetReorderTest" test`（story-admin-server） | **PASS** — Tests run: 8, Failures: 0, Errors: 0 |
 | `npm run build`（story-admin-web） | **PASS** — exit 0，built ~11s |
