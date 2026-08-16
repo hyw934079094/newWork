@@ -11,6 +11,7 @@ import {
 } from '../../api/combo';
 import { listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
+import AssetThumb from '../../components/AssetThumb.vue';
 import ComboPreviewPlayer from './ComboPreviewPlayer.vue';
 
 interface MemberRow {
@@ -61,12 +62,15 @@ const filteredAvailable = computed(() => {
 const sequenceHints = computed(() => {
   const hints: { type: 'success' | 'warning' | 'info'; text: string }[] = [];
   const raw = playSequence.value.trim();
-  if (!raw) {
-    hints.push({ type: 'warning', text: '播放序列必填，例如 1,2,1,3' });
+  if (members.value.length === 0) {
+    hints.push({ type: 'info', text: '请先添加成员；序列可留空，保存时按成员顺序 1..n' });
     return hints;
   }
-  if (members.value.length === 0) {
-    hints.push({ type: 'warning', text: '请先添加成员后再填写序列' });
+  if (!raw) {
+    hints.push({
+      type: 'success',
+      text: `未填写序列，将按成员顺序默认播放：1..${members.value.length}`,
+    });
     return hints;
   }
   const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
@@ -114,11 +118,14 @@ const sequenceHints = computed(() => {
 
 const sequenceStepCount = computed(() => {
   const raw = playSequence.value.trim();
-  if (!raw) return 0;
+  const maxNo = members.value.length;
+  if (!raw) {
+    return maxNo;
+  }
   return raw
     .split(',')
     .map((p) => p.trim())
-    .filter((t) => /^\d+$/.test(t) && Number(t) >= 1).length;
+    .filter((t) => /^\d+$/.test(t) && Number(t) >= 1 && Number(t) <= Math.max(maxNo, 1)).length;
 });
 
 const holdHints = computed(() => {
@@ -198,10 +205,6 @@ function removeHoldRow(index: number) {
 function previewFromForm() {
   if (members.value.length === 0) {
     ElMessage.warning('请先添加成员');
-    return;
-  }
-  if (!playSequence.value.trim()) {
-    ElMessage.warning('请填写播放序列');
     return;
   }
   if (sequenceHints.value.some((h) => h.type === 'warning')) {
@@ -298,10 +301,9 @@ function buildPayload(): ComboUpsertPayload | null {
     ElMessage.warning('请至少添加一个成员');
     return null;
   }
-  if (!playSequence.value.trim()) {
-    ElMessage.warning('请填写播放序列');
-    return null;
-  }
+  const resolvedSequence =
+    playSequence.value.trim() ||
+    members.value.map((_, i) => String(i + 1)).join(',');
   if (sequenceHints.value.some((h) => h.type === 'warning')) {
     ElMessage.warning(sequenceHints.value.find((h) => h.type === 'warning')!.text);
     return null;
@@ -320,7 +322,7 @@ function buildPayload(): ComboUpsertPayload | null {
 
   return {
     name: trimmedName,
-    playSequence: playSequence.value.trim(),
+    playSequence: resolvedSequence,
     defaultIntervalSec: defaultIntervalSec.value,
     loopEnabled: loopEnabled.value,
     remark: remark.value.trim() ? remark.value.trim() : null,
@@ -445,6 +447,11 @@ onMounted(async () => {
             size="small"
             empty-text="无可用 NORMAL 素材"
           >
+            <el-table-column label="预览" width="64">
+              <template #default="{ row }">
+                <AssetThumb :asset-id="row.id" :alt="row.displayName" :size="40" />
+              </template>
+            </el-table-column>
             <el-table-column prop="displayName" label="素材" min-width="140" show-overflow-tooltip />
             <el-table-column prop="id" label="ID" width="70" />
             <el-table-column label="操作" width="80" fixed="right">
@@ -467,6 +474,7 @@ onMounted(async () => {
             <template #item="{ element, index }">
               <div class="member-row">
                 <span class="drag-handle" title="拖拽排序">☰</span>
+                <AssetThumb :asset-id="element.assetId" :alt="element.displayName" :size="40" />
                 <span class="badge">{{ index + 1 }}</span>
                 <span class="member-name" :title="element.displayName">{{ element.displayName }}</span>
                 <span class="muted">#{{ element.assetId }}</span>
@@ -496,12 +504,12 @@ onMounted(async () => {
       </div>
       <el-input
         v-model="playSequence"
-        placeholder="逗号分隔成员编号，如 1,3,2,1"
+        placeholder="可留空；默认按成员顺序 1..n。也可自定义如 1,3,2,1"
       />
       <ul class="hints">
         <li v-for="(h, i) in sequenceHints" :key="i" :class="h.type">{{ h.text }}</li>
       </ul>
-      <p class="muted note">排序决定成员编号；序列可跳号、可重复。个性化停留的步序号指序列中的第几步。</p>
+      <p class="muted note">排序决定成员编号；序列可留空（默认顺序）、可跳号、可重复。个性化停留的步序号指序列中的第几步。</p>
     </div>
 
     <div class="panel">

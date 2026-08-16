@@ -12,7 +12,7 @@ import {
   type SeriesItem,
   type SeriesStatus,
 } from '../../api/series';
-import ImageLightbox from '../../components/ImageLightbox.vue';
+import AssetThumb from '../../components/AssetThumb.vue';
 
 const router = useRouter();
 
@@ -37,16 +37,6 @@ const pickerAssets = ref<AssetItem[]>([]);
 const pickerSelectedId = ref<number | null>(null);
 const pickerLoading = ref(false);
 const categories = ref<AssetCategoryItem[]>([]);
-
-const previewVisible = ref(false);
-const previewAssetId = ref<number | null>(null);
-const previewAlt = ref('');
-
-function openCoverPreview(assetId: number, alt?: string) {
-  previewAssetId.value = assetId;
-  previewAlt.value = alt ?? '';
-  previewVisible.value = true;
-}
 
 const filters = reactive({
   q: '',
@@ -269,19 +259,12 @@ onMounted(load);
     <el-table v-loading="loading" :data="rows" stripe empty-text="暂无系列">
       <el-table-column label="封面" width="88">
         <template #default="{ row }">
-          <button
+          <AssetThumb
             v-if="row.coverAssetId != null"
-            type="button"
-            class="cover-thumb-btn"
-            title="查看大图"
-            @click="openCoverPreview(row.coverAssetId, row.name)"
-          >
-            <img
-              class="cover-thumb"
-              :src="assetContentUrl(row.coverAssetId)"
-              :alt="row.name"
-            />
-          </button>
+            :asset-id="row.coverAssetId"
+            :alt="row.name"
+            :size="48"
+          />
           <span v-else class="cover-placeholder">无</span>
         </template>
       </el-table-column>
@@ -418,12 +401,6 @@ onMounted(load);
         </div>
       </template>
     </el-dialog>
-
-    <ImageLightbox
-      v-model="previewVisible"
-      :src="previewAssetId != null ? assetContentUrl(previewAssetId) : null"
-      :alt="previewAlt"
-    />
   </section>
 </template>
 
@@ -478,26 +455,6 @@ onMounted(load);
 }
 .filters-actions {
   margin-left: auto;
-}
-.cover-thumb-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-  display: inline-flex;
-  border-radius: 8px;
-}
-.cover-thumb-btn:focus-visible {
-  outline: 2px solid #2f6fed;
-  outline-offset: 2px;
-}
-.cover-thumb {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: #eef1f7;
-  display: block;
 }
 .cover-placeholder {
   color: #9aa6bf;

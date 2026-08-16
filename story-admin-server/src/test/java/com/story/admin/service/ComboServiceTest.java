@@ -180,6 +180,25 @@ class ComboServiceTest {
     assertThat(assetRepository.findById(a1)).isPresent();
   }
 
+  @Test
+  void emptyPlaySequenceDefaultsToMemberOrder() {
+    Long a1 = persistAsset("combo-def-1").getId();
+    Long a2 = persistAsset("combo-def-2").getId();
+
+    var created =
+        comboService.create(
+            new ComboUpsertRequest(
+                "default-seq",
+                "  ",
+                new BigDecimal("1.0"),
+                true,
+                null,
+                List.of(new ComboMemberRequest(a1, 1), new ComboMemberRequest(a2, 2)),
+                List.of()));
+
+    assertThat(created.playSequence()).isEqualTo("1,2");
+  }
+
   private Asset persistAsset(String name) {
     AssetCategory category = new AssetCategory();
     category.setCode("combo-" + name);

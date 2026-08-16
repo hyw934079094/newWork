@@ -29,9 +29,12 @@ const stepI = ref(0);
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 function parseSteps(): number[] {
-  const raw = props.playSequence.trim();
-  if (!raw || props.members.length === 0) return [];
+  if (props.members.length === 0) return [];
   const maxNo = props.members.length;
+  const raw = props.playSequence.trim();
+  if (!raw) {
+    return Array.from({ length: maxNo }, (_, i) => i + 1);
+  }
   const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
   const steps: number[] = [];
   for (const token of parts) {

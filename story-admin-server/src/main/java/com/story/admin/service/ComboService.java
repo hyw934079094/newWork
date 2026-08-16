@@ -91,9 +91,6 @@ public class ComboService {
     if (members.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "at least one member is required");
     }
-    if (req.playSequence() == null || req.playSequence().isBlank()) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "playSequence is required");
-    }
 
     validateMemberNosIfProvided(members);
     List<Long> assetIds = new ArrayList<>(members.size());
@@ -125,7 +122,11 @@ public class ComboService {
       memberNos.add(i + 1);
     }
 
-    List<Integer> steps = parsePlaySequence(req.playSequence());
+    String playSequenceRaw =
+        req.playSequence() == null || req.playSequence().isBlank()
+            ? defaultPlaySequence(members.size())
+            : req.playSequence().trim();
+    List<Integer> steps = parsePlaySequence(playSequenceRaw);
     if (steps.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "playSequence is required");
     }
@@ -233,6 +234,17 @@ public class ComboService {
       }
     }
     return steps;
+  }
+
+  private static String defaultPlaySequence(int memberCount) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 1; i <= memberCount; i++) {
+      if (i > 1) {
+        sb.append(',');
+      }
+      sb.append(i);
+    }
+    return sb.toString();
   }
 
   private static String normalizePlaySequence(List<Integer> steps) {
