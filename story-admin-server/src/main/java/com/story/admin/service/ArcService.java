@@ -186,18 +186,23 @@ public class ArcService {
 
   private void appendBeatSegments(
       List<Map<String, Object>> segments, Long pageId, JsonNode beat) {
-    JsonNode coverNode = beat.get("coverAssetId");
-    if (coverNode != null && !coverNode.isNull() && coverNode.isIntegralNumber()) {
-      long assetId = coverNode.asLong();
-      Map<String, Object> image = new LinkedHashMap<>();
-      image.put("type", "IMAGE");
-      image.put("pageId", pageId);
-      image.put("assetId", assetId);
-      image.put("contentPath", contentPath(assetId));
-      image.put("role", "BEAT_COVER");
-      segments.add(image);
-    }
     JsonNode children = beat.get("children");
+    boolean hasCoverChild = false;
+    if (children != null && !children.isNull() && children.isArray()) {
+      for (JsonNode child : children) {
+        if (child != null
+            && child.isObject()
+            && "COVER".equals(child.path("type").asText(null))) {
+          hasCoverChild = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasCoverChild) {
+      appendBeatImageFromCoverAssetId(segments, pageId, beat);
+    }
+
     if (children == null || children.isNull() || !children.isArray()) {
       return;
     }
@@ -206,7 +211,12 @@ public class ArcService {
         continue;
       }
       String childType = child.path("type").asText(null);
-      if ("BODY".equals(childType) || "DIALOGUE".equals(childType)) {
+      if ("COVER".equals(childType)) {
+        JsonNode assetIdNode = child.get("assetId");
+        if (assetIdNode != null && !assetIdNode.isNull() && assetIdNode.isIntegralNumber()) {
+          appendBeatImage(segments, pageId, assetIdNode.asLong());
+        }
+      } else if ("BODY".equals(childType) || "DIALOGUE".equals(childType)) {
         Map<String, Object> seg = new LinkedHashMap<>();
         seg.put("type", childType);
         seg.put("pageId", pageId);
@@ -214,6 +224,24 @@ public class ArcService {
         segments.add(seg);
       }
     }
+  }
+
+  private void appendBeatImageFromCoverAssetId(
+      List<Map<String, Object>> segments, Long pageId, JsonNode beat) {
+    JsonNode coverNode = beat.get("coverAssetId");
+    if (coverNode != null && !coverNode.isNull() && coverNode.isIntegralNumber()) {
+      appendBeatImage(segments, pageId, coverNode.asLong());
+    }
+  }
+
+  private void appendBeatImage(List<Map<String, Object>> segments, Long pageId, long assetId) {
+    Map<String, Object> image = new LinkedHashMap<>();
+    image.put("type", "IMAGE");
+    image.put("pageId", pageId);
+    image.put("assetId", assetId);
+    image.put("contentPath", contentPath(assetId));
+    image.put("role", "BEAT_COVER");
+    segments.add(image);
   }
 
   private JsonNode parseContentArray(String contentJson) {

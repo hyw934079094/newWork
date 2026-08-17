@@ -102,6 +102,28 @@ class ArcReadingStreamTest {
   }
 
   @Test
+  void readingStreamRespectsCoverChildOrderWithTextAboveImage() {
+    Long seriesId =
+        seriesService.create(new SeriesCreateRequest("阅读流上文", null, null, null, null)).getId();
+    StoryArc arc = arcService.create(seriesId, new ArcCreateRequest("卷", null, null, null));
+    Asset beatCover = persistAsset("beat-cover-above");
+
+    StoryPage page = pageService.create(arc.getId(), new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":"
+            + beatCover.getId()
+            + ",\"children\":[{\"type\":\"BODY\",\"text\":\"先文\"},{\"type\":\"COVER\",\"assetId\":"
+            + beatCover.getId()
+            + "},{\"type\":\"DIALOGUE\",\"text\":\"后对白\"}]}]";
+    pageService.update(page.getId(), new PageUpdateRequest("P1", json));
+
+    ArcReadingStreamResponse stream = arcService.readingStream(arc.getId());
+    List<String> types = stream.segments().stream().map(s -> (String) s.get("type")).toList();
+    assertThat(types)
+        .containsExactly("ARC_TITLE", "PAGE_TITLE", "BODY", "IMAGE", "DIALOGUE");
+  }
+
+  @Test
   void readingStreamNotFound() {
     assertThatThrownBy(() -> arcService.readingStream(-1L))
         .isInstanceOf(ResponseStatusException.class)

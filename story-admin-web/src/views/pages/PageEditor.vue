@@ -2,25 +2,27 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import draggable from 'vuedraggable';
 import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import { getPage, updatePage } from '../../api/page';
 import PagePreview, { type PagePreviewItem } from './PagePreview.vue';
 
 type TopType = 'TITLE' | 'BODY' | 'DIVIDER' | 'BEAT';
-type ChildType = 'BODY' | 'DIALOGUE';
+type ChildType = 'COVER' | 'BODY' | 'DIALOGUE';
+type TextChildType = 'BODY' | 'DIALOGUE';
 
 interface ChildItem {
   uid: string;
   type: ChildType;
   text: string;
+  assetId: number | null;
 }
 
 interface TimelineItem {
   uid: string;
   type: TopType;
   text: string;
-  coverAssetId: number | null;
   children: ChildItem[];
 }
 
@@ -31,7 +33,7 @@ const TOP_LABELS: Record<TopType, string> = {
   BEAT: '画面组',
 };
 
-const CHILD_LABELS: Record<ChildType, string> = {
+const TEXT_CHILD_LABELS: Record<TextChildType, string> = {
   BODY: '正文',
   DIALOGUE: '对话',
 };
@@ -53,16 +55,25 @@ const pickerKeyword = ref('');
 const pickerAssets = ref<AssetItem[]>([]);
 const pickerSelectedId = ref<number | null>(null);
 const pickerLoading = ref(false);
-const pickerTargetUid = ref<string | null>(null);
+const pickerBeatUid = ref<string | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 
 const previewItems = computed<PagePreviewItem[]>(() =>
-  items.value.map((item) => ({
-    type: item.type,
-    text: item.text,
-    coverAssetId: item.coverAssetId,
-    children: item.children.map((child) => ({ type: child.type, text: child.text })),
-  })),
+  items.value.map((item) => {
+    if (item.type !== 'BEAT') {
+      return { type: item.type, text: item.text };
+    }
+    const cover = findCover(item);
+    return {
+      type: 'BEAT',
+      coverAssetId: cover?.assetId ?? null,
+      children: item.children.map((child) =>
+        child.type === 'COVER'
+          ? { type: 'COVER', assetId: child.assetId }
+          : { type: child.type, text: child.text },
+      ),
+    };
+  }),
 );
 
 function nextUid(): string {
@@ -86,13 +97,58 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function parseChild(node: unknown): ChildItem {
+function findCover(item: TimelineItem): ChildItem | undefined {
+  return item.children.find((c) => c.type === 'COVER');
+}
+
+function ensureCoverChild(children: ChildItem[], coverAssetId: number | null): ChildItem[] {
+  const coverCount = children.filter((c) => c.type === 'COVER').length;
+  if (coverCount === 0) {
+    return [
+      { uid: nextUid(), type: 'COVER', text: '', assetId: coverAssetId },
+      ...children,
+    ];
+  }
+  const result: ChildItem[] = [];
+  let coverPlaced = false;
+  for (const child of children) {
+    if (child.type !== 'COVER') {
+      result.push(child);
+      continue;
+    }
+    if (coverPlaced) {
+      continue;
+    }
+    result.push({
+      ...child,
+      assetId: child.assetId ?? coverAssetId,
+    });
+    coverPlaced = true;
+  }
+  return result;
+}
+
+function parseChild(node: unknown): ChildItem | null {
   const obj = asRecord(node);
-  return {
-    uid: nextUid(),
-    type: obj?.type === 'DIALOGUE' ? 'DIALOGUE' : 'BODY',
-    text: typeof obj?.text === 'string' ? obj.text : '',
-  };
+  if (!obj) return null;
+  if (obj.type === 'COVER') {
+    const asset = obj.assetId;
+    return {
+      uid: nextUid(),
+      type: 'COVER',
+      text: '',
+      assetId: typeof asset === 'number' && Number.isFinite(asset) ? asset : null,
+    };
+  }
+  if (obj.type === 'DIALOGUE' || obj.type === 'BODY') {
+    return {
+      uid: nextUid(),
+      type: obj.type,
+      text: typeof obj.text === 'string' ? obj.text : '',
+      assetId: null,
+    };
+  }
+  return null;
 }
 
 function parseTop(node: unknown): TimelineItem | null {
@@ -105,23 +161,24 @@ function parseTop(node: unknown): TimelineItem | null {
     const cover = obj.coverAssetId;
     const coverAssetId = typeof cover === 'number' && Number.isFinite(cover) ? cover : null;
     const childrenRaw = Array.isArray(obj.children) ? obj.children : [];
+    const parsed = childrenRaw
+      .map(parseChild)
+      .filter((child): child is ChildItem => child != null);
     return {
       uid: nextUid(),
       type: 'BEAT',
       text: '',
-      coverAssetId,
-      children: childrenRaw.map(parseChild),
+      children: ensureCoverChild(parsed, coverAssetId),
     };
   }
   if (type === 'DIVIDER') {
-    return { uid: nextUid(), type: 'DIVIDER', text: '', coverAssetId: null, children: [] };
+    return { uid: nextUid(), type: 'DIVIDER', text: '', children: [] };
   }
   if (type === 'TITLE' || type === 'BODY') {
     return {
       uid: nextUid(),
       type,
       text: typeof obj.text === 'string' ? obj.text : '',
-      coverAssetId: null,
       children: [],
     };
   }
@@ -145,10 +202,15 @@ function parseContent(raw?: string | null): TimelineItem[] {
 function serializeItems(list: TimelineItem[]): unknown[] {
   return list.map((item) => {
     if (item.type === 'BEAT') {
+      const cover = findCover(item);
       return {
         type: 'BEAT',
-        coverAssetId: item.coverAssetId,
-        children: item.children.map((child) => ({ type: child.type, text: child.text })),
+        coverAssetId: cover?.assetId ?? null,
+        children: item.children.map((child) =>
+          child.type === 'COVER'
+            ? { type: 'COVER', assetId: child.assetId }
+            : { type: child.type, text: child.text },
+        ),
       };
     }
     if (item.type === 'DIVIDER') {
@@ -159,11 +221,18 @@ function serializeItems(list: TimelineItem[]): unknown[] {
 }
 
 function createTop(type: TopType): TimelineItem {
+  if (type === 'BEAT') {
+    return {
+      uid: nextUid(),
+      type: 'BEAT',
+      text: '',
+      children: [{ uid: nextUid(), type: 'COVER', text: '', assetId: null }],
+    };
+  }
   return {
     uid: nextUid(),
     type,
     text: '',
-    coverAssetId: null,
     children: [],
   };
 }
@@ -188,11 +257,16 @@ function moveTop(index: number, dir: -1 | 1) {
   items.value = copy;
 }
 
-function addChild(item: TimelineItem, type: ChildType) {
-  item.children = [...item.children, { uid: nextUid(), type, text: '' }];
+function addChild(item: TimelineItem, type: TextChildType) {
+  item.children = [...item.children, { uid: nextUid(), type, text: '', assetId: null }];
 }
 
 function removeChild(item: TimelineItem, index: number) {
+  const child = item.children[index];
+  if (child?.type === 'COVER') {
+    ElMessage.warning('封面节点不可删除，可清除或更换素材');
+    return;
+  }
   item.children = item.children.filter((_, i) => i !== index);
 }
 
@@ -209,12 +283,15 @@ function moveChild(item: TimelineItem, index: number, dir: -1 | 1) {
 }
 
 function clearCover(item: TimelineItem) {
-  item.coverAssetId = null;
+  const cover = findCover(item);
+  if (cover) {
+    cover.assetId = null;
+  }
 }
 
 async function openCoverPicker(item: TimelineItem) {
-  pickerTargetUid.value = item.uid;
-  pickerSelectedId.value = item.coverAssetId;
+  pickerBeatUid.value = item.uid;
+  pickerSelectedId.value = findCover(item)?.assetId ?? null;
   pickerCategoryId.value = 'all';
   pickerKeyword.value = '';
   pickerVisible.value = true;
@@ -246,9 +323,14 @@ function isPickerSelected(id: number): boolean {
 }
 
 function confirmCoverPicker() {
-  const target = items.value.find((item) => item.uid === pickerTargetUid.value);
+  const target = items.value.find((item) => item.uid === pickerBeatUid.value);
   if (target) {
-    target.coverAssetId = pickerSelectedId.value;
+    let cover = findCover(target);
+    if (!cover) {
+      cover = { uid: nextUid(), type: 'COVER', text: '', assetId: null };
+      target.children = [cover, ...target.children];
+    }
+    cover.assetId = pickerSelectedId.value;
   }
   pickerVisible.value = false;
 }
@@ -293,9 +375,11 @@ async function save() {
     ElMessage.warning('请填写页面标题');
     return;
   }
-  const missingCover = items.value.find(
-    (item) => item.type === 'BEAT' && (item.coverAssetId == null || !Number.isInteger(item.coverAssetId)),
-  );
+  const missingCover = items.value.find((item) => {
+    if (item.type !== 'BEAT') return false;
+    const cover = findCover(item);
+    return cover == null || cover.assetId == null || !Number.isInteger(cover.assetId);
+  });
   if (missingCover) {
     ElMessage.warning('画面组必须选择封面素材');
     return;
@@ -348,7 +432,7 @@ onMounted(() => {
       <div class="panel timeline-panel">
         <div class="panel-head">
           <strong>时间线</strong>
-          <span class="muted">顶层项 {{ items.length }}</span>
+          <span class="muted">拖动手柄排序 · 顶层 {{ items.length }}</span>
         </div>
         <div class="add-row">
           <el-button size="small" @click="addTop('TITLE')">添加标题</el-button>
@@ -359,123 +443,152 @@ onMounted(() => {
 
         <p v-if="!items.length" class="empty-hint">点击上方按钮添加内容块</p>
 
-        <div
-          v-for="(item, index) in items"
-          :key="item.uid"
-          class="timeline-card"
-          :class="`is-${item.type.toLowerCase()}`"
+        <draggable
+          v-model="items"
+          item-key="uid"
+          handle=".drag-handle"
+          class="timeline-list"
         >
-          <div class="card-head">
-            <span class="type-badge">{{ TOP_LABELS[item.type] }}</span>
-            <div class="card-actions">
-              <el-button link type="primary" :disabled="index === 0" @click="moveTop(index, -1)">
-                上移
-              </el-button>
-              <el-button
-                link
-                type="primary"
-                :disabled="index === items.length - 1"
-                @click="moveTop(index, 1)"
-              >
-                下移
-              </el-button>
-              <el-button link type="danger" @click="removeTop(index)">删除</el-button>
-            </div>
-          </div>
-
-          <el-input
-            v-if="item.type === 'TITLE'"
-            v-model="item.text"
-            placeholder="标题文字"
-          />
-          <el-input
-            v-else-if="item.type === 'BODY'"
-            v-model="item.text"
-            type="textarea"
-            :rows="3"
-            placeholder="正文"
-          />
-          <p v-else-if="item.type === 'DIVIDER'" class="divider-hint">阅读时显示为分隔线</p>
-
-          <div v-else-if="item.type === 'BEAT'" class="beat-editor">
-            <div class="cover-editor">
-              <div class="cover-preview">
-                <img
-                  v-if="item.coverAssetId != null"
-                  :src="assetContentUrl(item.coverAssetId)"
-                  alt="画面组封面"
-                />
-                <span v-else class="cover-placeholder">暂无封面</span>
-              </div>
-              <div class="cover-actions">
-                <el-button size="small" @click="openCoverPicker(item)">选择封面</el-button>
-                <el-button
-                  size="small"
-                  :disabled="item.coverAssetId == null"
-                  @click="clearCover(item)"
-                >
-                  清除
-                </el-button>
-              </div>
-            </div>
-
-            <div class="child-head">
-              <span>子块</span>
-              <div class="child-add">
-                <el-button size="small" @click="addChild(item, 'BODY')">添加正文</el-button>
-                <el-button size="small" @click="addChild(item, 'DIALOGUE')">添加对话</el-button>
-              </div>
-            </div>
-            <p v-if="!item.children.length" class="empty-hint child-empty">可添加正文或对话</p>
-            <div
-              v-for="(child, ci) in item.children"
-              :key="child.uid"
-              class="child-card"
-            >
+          <template #item="{ element: item, index }">
+            <div class="timeline-card" :class="`is-${item.type.toLowerCase()}`">
               <div class="card-head">
-                <el-select v-model="child.type" size="small" class="child-type">
-                  <el-option
-                    v-for="(label, value) in CHILD_LABELS"
-                    :key="value"
-                    :label="label"
-                    :value="value"
-                  />
-                </el-select>
+                <div class="card-head-left">
+                  <span class="drag-handle" title="拖拽排序">⋮⋮</span>
+                  <span class="type-badge">{{ TOP_LABELS[item.type as TopType] }}</span>
+                </div>
                 <div class="card-actions">
-                  <el-button
-                    link
-                    type="primary"
-                    :disabled="ci === 0"
-                    @click="moveChild(item, ci, -1)"
-                  >
+                  <el-button link type="primary" :disabled="index === 0" @click="moveTop(index, -1)">
                     上移
                   </el-button>
                   <el-button
                     link
                     type="primary"
-                    :disabled="ci === item.children.length - 1"
-                    @click="moveChild(item, ci, 1)"
+                    :disabled="index === items.length - 1"
+                    @click="moveTop(index, 1)"
                   >
                     下移
                   </el-button>
-                  <el-button link type="danger" @click="removeChild(item, ci)">删除</el-button>
+                  <el-button link type="danger" @click="removeTop(index)">删除</el-button>
                 </div>
               </div>
+
               <el-input
-                v-model="child.text"
-                type="textarea"
-                :rows="2"
-                :placeholder="child.type === 'DIALOGUE' ? '对话内容' : '正文'"
+                v-if="item.type === 'TITLE'"
+                v-model="item.text"
+                placeholder="标题文字"
               />
+              <el-input
+                v-else-if="item.type === 'BODY'"
+                v-model="item.text"
+                type="textarea"
+                :rows="3"
+                placeholder="正文"
+              />
+              <p v-else-if="item.type === 'DIVIDER'" class="divider-hint">阅读时显示为分隔线</p>
+
+              <div v-else-if="item.type === 'BEAT'" class="beat-editor">
+                <div class="child-head">
+                  <span>组内块（封面可拖到文上/文下）</span>
+                  <div class="child-add">
+                    <el-button size="small" @click="addChild(item, 'BODY')">添加正文</el-button>
+                    <el-button size="small" @click="addChild(item, 'DIALOGUE')">添加对话</el-button>
+                  </div>
+                </div>
+
+                <draggable
+                  v-model="item.children"
+                  item-key="uid"
+                  handle=".drag-handle"
+                  class="child-list"
+                >
+                  <template #item="{ element: child, index: ci }">
+                    <div class="child-card" :class="{ 'is-cover': child.type === 'COVER' }">
+                      <div class="card-head">
+                        <div class="card-head-left">
+                          <span class="drag-handle" title="拖拽排序">⋮⋮</span>
+                          <span v-if="child.type === 'COVER'" class="type-badge cover-badge">封面</span>
+                          <el-select
+                            v-else
+                            v-model="child.type"
+                            size="small"
+                            class="child-type"
+                          >
+                            <el-option
+                              v-for="(label, value) in TEXT_CHILD_LABELS"
+                              :key="value"
+                              :label="label"
+                              :value="value"
+                            />
+                          </el-select>
+                        </div>
+                        <div class="card-actions">
+                          <el-button
+                            link
+                            type="primary"
+                            :disabled="ci === 0"
+                            @click="moveChild(item, ci, -1)"
+                          >
+                            上移
+                          </el-button>
+                          <el-button
+                            link
+                            type="primary"
+                            :disabled="ci === item.children.length - 1"
+                            @click="moveChild(item, ci, 1)"
+                          >
+                            下移
+                          </el-button>
+                          <el-button
+                            v-if="child.type !== 'COVER'"
+                            link
+                            type="danger"
+                            @click="removeChild(item, ci)"
+                          >
+                            删除
+                          </el-button>
+                        </div>
+                      </div>
+
+                      <div v-if="child.type === 'COVER'" class="cover-editor">
+                        <div class="cover-preview">
+                          <img
+                            v-if="child.assetId != null"
+                            :src="assetContentUrl(child.assetId)"
+                            alt="画面组封面"
+                          />
+                          <span v-else class="cover-placeholder">暂无封面</span>
+                        </div>
+                        <div class="cover-actions">
+                          <el-button size="small" @click="openCoverPicker(item)">选择封面</el-button>
+                          <el-button
+                            size="small"
+                            :disabled="child.assetId == null"
+                            @click="clearCover(item)"
+                          >
+                            清除
+                          </el-button>
+                        </div>
+                      </div>
+                      <el-input
+                        v-else
+                        v-model="child.text"
+                        type="textarea"
+                        :rows="2"
+                        :placeholder="child.type === 'DIALOGUE' ? '对话内容' : '正文'"
+                      />
+                    </div>
+                  </template>
+                </draggable>
+              </div>
             </div>
-          </div>
-        </div>
+          </template>
+        </draggable>
       </div>
 
       <div class="panel preview-panel">
         <div class="panel-head">
           <strong>预览</strong>
-          <span class="muted">上图下文 · 只读</span>
+          <span class="muted">按时间线顺序 · 只读</span>
         </div>
         <PagePreview :items="previewItems" />
       </div>
@@ -618,6 +731,11 @@ onMounted(() => {
   color: #9aa6bf;
   font-size: 13px;
 }
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
 .timeline-card {
   border: 1px solid #e6ebf2;
   border-radius: 12px;
@@ -632,6 +750,23 @@ onMounted(() => {
   gap: 8px;
   margin-bottom: 10px;
 }
+.card-head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.drag-handle {
+  cursor: grab;
+  color: #94a3b8;
+  user-select: none;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
 .type-badge {
   display: inline-flex;
   align-items: center;
@@ -642,6 +777,10 @@ onMounted(() => {
   color: #3a6ff0;
   font-size: 12px;
   font-weight: 600;
+}
+.cover-badge {
+  background: #eef8f1;
+  color: #2f7a4a;
 }
 .card-actions {
   display: inline-flex;
@@ -703,8 +842,10 @@ onMounted(() => {
   display: flex;
   gap: 8px;
 }
-.child-empty {
-  margin-top: 0;
+.child-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .child-card {
   border: 1px dashed #d8deea;
@@ -712,8 +853,10 @@ onMounted(() => {
   padding: 10px;
   background: #fff;
 }
-.child-card + .child-card {
-  margin-top: 8px;
+.child-card.is-cover {
+  border-style: solid;
+  border-color: #c5dccb;
+  background: #f7fbf8;
 }
 .child-type {
   width: 108px;

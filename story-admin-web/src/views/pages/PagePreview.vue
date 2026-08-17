@@ -6,6 +6,7 @@ import ImageLightbox from '../../components/ImageLightbox.vue';
 export type PagePreviewChild = {
   type: string;
   text?: string;
+  assetId?: number | null;
 };
 
 export type PagePreviewItem = {
@@ -36,6 +37,32 @@ function openLightbox(assetId: number, alt?: string) {
 function childClass(type: string): string {
   return type === 'DIALOGUE' ? 'dialogue' : 'body';
 }
+
+/** Ordered beat nodes for preview (COVER or text). Legacy: coverAssetId first. */
+function beatNodes(item: PagePreviewItem): PagePreviewChild[] {
+  const children = item.children ?? [];
+  const hasCover = children.some((c) => c.type === 'COVER');
+  if (hasCover) {
+    return children;
+  }
+  const nodes: PagePreviewChild[] = [];
+  if (item.coverAssetId != null) {
+    nodes.push({ type: 'COVER', assetId: item.coverAssetId });
+  }
+  for (const child of children) {
+    if (child.type !== 'COVER') {
+      nodes.push(child);
+    }
+  }
+  return nodes;
+}
+
+function coverAssetIdOf(child: PagePreviewChild, item: PagePreviewItem): number | null {
+  if (typeof child.assetId === 'number' && Number.isFinite(child.assetId)) {
+    return child.assetId;
+  }
+  return item.coverAssetId ?? null;
+}
 </script>
 
 <template>
@@ -46,27 +73,23 @@ function childClass(type: string): string {
       <p v-else-if="item.type === 'BODY'" class="block-body">{{ item.text }}</p>
       <hr v-else-if="item.type === 'DIVIDER'" class="block-divider" />
       <div v-else-if="item.type === 'BEAT'" class="beat">
-        <div class="figure">
-          <button
-            v-if="item.coverAssetId != null"
-            type="button"
-            class="figure-btn"
-            title="查看大图"
-            @click="openLightbox(item.coverAssetId, '画面组插画')"
-          >
-            <img :src="assetContentUrl(item.coverAssetId)" alt="画面组插画" />
-          </button>
-          <div v-else class="figure-placeholder">未选择封面</div>
-        </div>
-        <div v-if="item.children?.length" class="children">
-          <p
-            v-for="(child, ci) in item.children"
-            :key="ci"
-            :class="childClass(child.type)"
-          >
+        <template v-for="(child, ci) in beatNodes(item)" :key="ci">
+          <div v-if="child.type === 'COVER'" class="figure">
+            <button
+              v-if="coverAssetIdOf(child, item) != null"
+              type="button"
+              class="figure-btn"
+              title="查看大图"
+              @click="openLightbox(coverAssetIdOf(child, item)!, '画面组插画')"
+            >
+              <img :src="assetContentUrl(coverAssetIdOf(child, item)!)" alt="画面组插画" />
+            </button>
+            <div v-else class="figure-placeholder">未选择封面</div>
+          </div>
+          <p v-else :class="childClass(child.type)">
             {{ child.text }}
           </p>
-        </div>
+        </template>
       </div>
       <p v-else class="block-body">{{ item.text }}</p>
     </template>
@@ -88,10 +111,12 @@ function childClass(type: string): string {
 .page-preview > * + * {
   margin-top: var(--gap-beat);
 }
-.beat .figure + .children {
+.beat > * + * {
   margin-top: var(--gap-figure-text);
 }
-.beat .children > * + * {
+.beat .figure + p,
+.beat p + .figure,
+.beat p + p {
   margin-top: var(--gap-inline);
 }
 .preview-empty {

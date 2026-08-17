@@ -68,11 +68,33 @@ class PageServiceTest {
         "[{\"type\":\"BEAT\",\"coverAssetId\":"
             + assetId
             + ",\"children\":[{\"type\":\"BODY\",\"text\":\"hi\"}]}]";
-    pageService.update(p.getId(), new PageUpdateRequest("P1", json));
+    StoryPage saved = pageService.update(p.getId(), new PageUpdateRequest("P1", json));
     assertThat(pageAssetRefRepository.findByPageId(p.getId())).hasSize(1);
     PageAssetRef ref = pageAssetRefRepository.findByPageId(p.getId()).get(0);
     assertThat(ref.getAssetId()).isEqualTo(assetId);
     assertThat(ref.getRefKind()).isEqualTo("BEAT_COVER");
+    assertThat(saved.getContentJson()).contains("\"type\":\"COVER\"");
+    assertThat(saved.getContentJson()).contains("\"assetId\":" + assetId);
+  }
+
+  @Test
+  void saveBeatRejectsTwoCoverChildren() {
+    Long arcId = persistArc();
+    Long assetId = persistAsset("beat-two-cover").getId();
+    StoryPage p = pageService.create(arcId, new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":"
+            + assetId
+            + ",\"children\":[{\"type\":\"COVER\",\"assetId\":"
+            + assetId
+            + "},{\"type\":\"COVER\",\"assetId\":"
+            + assetId
+            + "}]}]";
+    assertThatThrownBy(
+            () -> pageService.update(p.getId(), new PageUpdateRequest("P1", json)))
+        .isInstanceOf(ResponseStatusException.class)
+        .extracting(ex -> ((ResponseStatusException) ex).getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
   }
 
   @Test

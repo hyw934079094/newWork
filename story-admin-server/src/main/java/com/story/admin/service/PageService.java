@@ -3,6 +3,8 @@ package com.story.admin.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.PageAssetRef;
@@ -27,7 +29,7 @@ public class PageService {
   static final String DEFAULT_CONTENT = "[]";
   static final String REF_KIND_BEAT_COVER = "BEAT_COVER";
   private static final Set<String> TOP_LEVEL_TYPES = Set.of("TITLE", "BODY", "DIVIDER", "BEAT");
-  private static final Set<String> BEAT_CHILD_TYPES = Set.of("BODY", "DIALOGUE");
+  private static final Set<String> BEAT_CHILD_TYPES = Set.of("COVER", "BODY", "DIALOGUE");
 
   private final StoryPageRepository pageRepository;
   private final PageAssetRefRepository pageAssetRefRepository;
@@ -139,7 +141,81 @@ public class PageService {
     if (contentJson == null || contentJson.isBlank()) {
       return DEFAULT_CONTENT;
     }
-    return contentJson;
+    JsonNode root;
+    try {
+      root = objectMapper.readTree(contentJson);
+    } catch (JsonProcessingException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content_json is not valid JSON");
+    }
+    if (root == null || !root.isArray()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content_json must be an array");
+    }
+    for (JsonNode item : root) {
+      if (item != null && item.isObject() && "BEAT".equals(item.path("type").asText(null))) {
+        normalizeBeat((ObjectNode) item);
+      }
+    }
+    try {
+      return objectMapper.writeValueAsString(root);
+    } catch (JsonProcessingException ex) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content_json normalize failed");
+    }
+  }
+
+  private void normalizeBeat(ObjectNode beat) {
+    ArrayNode children;
+    JsonNode childrenNode = beat.get("children");
+    if (childrenNode == null || childrenNode.isNull()) {
+      children = objectMapper.createArrayNode();
+      beat.set("children", children);
+    } else if (!childrenNode.isArray()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "BEAT children must be an array");
+    } else {
+      children = (ArrayNode) childrenNode;
+    }
+
+    int coverIndex = -1;
+    Long coverFromChild = null;
+    for (int i = 0; i < children.size(); i++) {
+      JsonNode child = children.get(i);
+      if (child != null && child.isObject() && "COVER".equals(child.path("type").asText(null))) {
+        if (coverIndex >= 0) {
+          throw new ResponseStatusException(
+              HttpStatus.BAD_REQUEST, "BEAT must contain exactly one COVER child");
+        }
+        coverIndex = i;
+        JsonNode assetIdNode = child.get("assetId");
+        if (assetIdNode != null && !assetIdNode.isNull() && assetIdNode.isIntegralNumber()) {
+          coverFromChild = assetIdNode.asLong();
+        }
+      }
+    }
+
+    JsonNode legacyCover = beat.get("coverAssetId");
+    Long legacyId = null;
+    if (legacyCover != null && !legacyCover.isNull() && legacyCover.isIntegralNumber()) {
+      legacyId = legacyCover.asLong();
+    }
+
+    if (coverIndex < 0) {
+      if (legacyId == null) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "BEAT COVER (or coverAssetId) is required");
+      }
+      ObjectNode cover = objectMapper.createObjectNode();
+      cover.put("type", "COVER");
+      cover.put("assetId", legacyId);
+      children.insert(0, cover);
+      coverFromChild = legacyId;
+    } else if (coverFromChild == null) {
+      if (legacyId == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "BEAT COVER assetId is required");
+      }
+      ((ObjectNode) children.get(coverIndex)).put("assetId", legacyId);
+      coverFromChild = legacyId;
+    }
+
+    beat.put("coverAssetId", coverFromChild);
   }
 
   private Set<Long> validateAndCollectBeatCovers(String contentJson) {
@@ -170,23 +246,41 @@ public class PageService {
         long coverAssetId = coverNode.asLong();
         validateNormalAsset(coverAssetId);
         coverIds.add(coverAssetId);
+
         JsonNode children = item.get("children");
-        if (children != null && !children.isNull()) {
-          if (!children.isArray()) {
+        if (children == null || children.isNull() || !children.isArray()) {
+          throw new ResponseStatusException(
+              HttpStatus.BAD_REQUEST, "BEAT children must be an array");
+        }
+        int coverCount = 0;
+        for (JsonNode child : children) {
+          if (child == null || !child.isObject()) {
             throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, "BEAT children must be an array");
+                HttpStatus.BAD_REQUEST, "BEAT child must be an object");
           }
-          for (JsonNode child : children) {
-            if (child == null || !child.isObject()) {
-              throw new ResponseStatusException(
-                  HttpStatus.BAD_REQUEST, "BEAT child must be an object");
-            }
-            String childType = child.path("type").asText(null);
-            if (childType == null || !BEAT_CHILD_TYPES.contains(childType)) {
-              throw new ResponseStatusException(
-                  HttpStatus.BAD_REQUEST, "illegal BEAT child type: " + childType);
-            }
+          String childType = child.path("type").asText(null);
+          if (childType == null || !BEAT_CHILD_TYPES.contains(childType)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "illegal BEAT child type: " + childType);
           }
+          if ("COVER".equals(childType)) {
+            coverCount++;
+            JsonNode assetIdNode = child.get("assetId");
+            if (assetIdNode == null || assetIdNode.isNull() || !assetIdNode.isIntegralNumber()) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT COVER assetId is required");
+            }
+            long childAssetId = assetIdNode.asLong();
+            if (childAssetId != coverAssetId) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COVER assetId");
+            }
+            validateNormalAsset(childAssetId);
+          }
+        }
+        if (coverCount != 1) {
+          throw new ResponseStatusException(
+              HttpStatus.BAD_REQUEST, "BEAT must contain exactly one COVER child");
         }
       }
     }
