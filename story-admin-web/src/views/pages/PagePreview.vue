@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { assetContentUrl } from '../../api/asset';
+import { getCombo, type ComboDetail } from '../../api/combo';
 import ImageLightbox from '../../components/ImageLightbox.vue';
+import ComboPreviewPlayer from '../combos/ComboPreviewPlayer.vue';
 
 export type PagePreviewChild = {
   type: string;
   text?: string;
   assetId?: number | null;
+  comboId?: number | null;
 };
 
 export type PagePreviewItem = {
@@ -16,13 +19,15 @@ export type PagePreviewItem = {
   children?: PagePreviewChild[];
 };
 
-defineProps<{
+const props = defineProps<{
   items: PagePreviewItem[];
 }>();
 
 const lightboxVisible = ref(false);
 const lightboxAssetId = ref<number | null>(null);
 const lightboxAlt = ref('');
+const comboCache = reactive<Record<number, ComboDetail | null>>({});
+const comboLoading = reactive<Record<number, boolean>>({});
 
 const lightboxSrc = computed(() =>
   lightboxAssetId.value != null ? assetContentUrl(lightboxAssetId.value) : null,
@@ -38,11 +43,10 @@ function childClass(type: string): string {
   return type === 'DIALOGUE' ? 'dialogue' : 'body';
 }
 
-/** Ordered beat nodes for preview (COVER or text). Legacy: coverAssetId first. */
 function beatNodes(item: PagePreviewItem): PagePreviewChild[] {
   const children = item.children ?? [];
-  const hasCover = children.some((c) => c.type === 'COVER');
-  if (hasCover) {
+  const hasVisual = children.some((c) => c.type === 'COVER' || c.type === 'COMBO');
+  if (hasVisual) {
     return children;
   }
   const nodes: PagePreviewChild[] = [];
@@ -50,7 +54,7 @@ function beatNodes(item: PagePreviewItem): PagePreviewChild[] {
     nodes.push({ type: 'COVER', assetId: item.coverAssetId });
   }
   for (const child of children) {
-    if (child.type !== 'COVER') {
+    if (child.type !== 'COVER' && child.type !== 'COMBO') {
       nodes.push(child);
     }
   }
@@ -63,6 +67,49 @@ function coverAssetIdOf(child: PagePreviewChild, item: PagePreviewItem): number 
   }
   return item.coverAssetId ?? null;
 }
+
+async function ensureCombo(comboId: number) {
+  if (comboCache[comboId] !== undefined || comboLoading[comboId]) {
+    return;
+  }
+  comboLoading[comboId] = true;
+  try {
+    comboCache[comboId] = await getCombo(comboId);
+  } catch {
+    comboCache[comboId] = null;
+  } finally {
+    comboLoading[comboId] = false;
+  }
+}
+
+function collectComboIds(items: PagePreviewItem[]): number[] {
+  const ids = new Set<number>();
+  for (const item of items) {
+    if (item.type !== 'BEAT') continue;
+    for (const child of beatNodes(item)) {
+      if (child.type === 'COMBO' && typeof child.comboId === 'number') {
+        ids.add(child.comboId);
+      }
+    }
+  }
+  return [...ids];
+}
+
+watch(
+  () => props.items,
+  (items) => {
+    for (const id of collectComboIds(items)) {
+      void ensureCombo(id);
+    }
+  },
+  { immediate: true, deep: true },
+);
+
+onMounted(() => {
+  for (const id of collectComboIds(props.items)) {
+    void ensureCombo(id);
+  }
+});
 </script>
 
 <template>
@@ -85,6 +132,21 @@ function coverAssetIdOf(child: PagePreviewChild, item: PagePreviewItem): number 
               <img :src="assetContentUrl(coverAssetIdOf(child, item)!)" alt="画面组插画" />
             </button>
             <div v-else class="figure-placeholder">未选择封面</div>
+          </div>
+          <div v-else-if="child.type === 'COMBO'" class="figure combo-figure">
+            <p v-if="child.comboId == null" class="figure-placeholder">未选择组合</p>
+            <p v-else-if="comboLoading[child.comboId]" class="figure-placeholder">组合加载中…</p>
+            <p v-else-if="!comboCache[child.comboId]" class="figure-placeholder">组合不可用</p>
+            <ComboPreviewPlayer
+              v-else
+              :members="comboCache[child.comboId]!.members"
+              :play-sequence="comboCache[child.comboId]!.playSequence"
+              :default-interval-sec="Number(comboCache[child.comboId]!.defaultIntervalSec)"
+              :loop-enabled="comboCache[child.comboId]!.loopEnabled"
+              :step-holds="comboCache[child.comboId]!.stepHolds"
+              autoplay
+              compact
+            />
           </div>
           <p v-else :class="childClass(child.type)">
             {{ child.text }}
@@ -171,6 +233,11 @@ function coverAssetIdOf(child: PagePreviewChild, item: PagePreviewItem): number 
   align-items: center;
   justify-content: center;
   font-size: 13px;
+  margin: 0;
+}
+.combo-figure {
+  border-radius: 10px;
+  overflow: hidden;
 }
 .dialogue {
   margin: 0;

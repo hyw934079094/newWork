@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { assetContentUrl } from '../../api/asset';
 
 export interface PreviewMember {
@@ -13,13 +13,22 @@ export interface PreviewHold {
   holdSeconds: number | null;
 }
 
-const props = defineProps<{
-  members: PreviewMember[];
-  playSequence: string;
-  defaultIntervalSec: number;
-  loopEnabled: boolean;
-  stepHolds: PreviewHold[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    members: PreviewMember[];
+    playSequence: string;
+    defaultIntervalSec: number;
+    loopEnabled: boolean;
+    stepHolds: PreviewHold[];
+    /** Start playing when members/sequence become ready. */
+    autoplay?: boolean;
+    compact?: boolean;
+  }>(),
+  {
+    autoplay: false,
+    compact: false,
+  },
+);
 
 const playing = ref(false);
 /** True after loop-off reaches the end (last frame held). */
@@ -169,9 +178,17 @@ watch(
     }
     if (playing.value) {
       scheduleNext();
+    } else if (props.autoplay) {
+      play();
     }
   },
 );
+
+onMounted(() => {
+  if (props.autoplay && canPlay.value) {
+    play();
+  }
+});
 
 onUnmounted(() => {
   clearTimer();
@@ -181,18 +198,18 @@ defineExpose({ startFromForm, play, pause, togglePlay });
 </script>
 
 <template>
-  <div class="combo-preview-player">
+  <div class="combo-preview-player" :class="{ compact }">
     <div class="preview-stage">
       <template v-if="currentMember && contentUrl">
         <img :src="contentUrl" :alt="currentMember.displayName" />
         <span class="member-badge" title="成员编号">{{ currentMemberNo }}</span>
       </template>
       <div v-else class="preview-empty">
-        {{ canPlay ? '点击「用当前表单预览」开始' : '请完善成员与有效播放序列后再预览' }}
+        {{ canPlay ? (autoplay ? '准备播放…' : '点击「用当前表单预览」开始') : '请完善成员与有效播放序列后再预览' }}
       </div>
     </div>
 
-    <div class="preview-meta">
+    <div v-if="!compact" class="preview-meta">
       <span>
         步 {{ currentStepDisplay }} / {{ total || '—' }}
       </span>
@@ -204,10 +221,10 @@ defineExpose({ startFromForm, play, pause, togglePlay });
     </div>
 
     <div class="preview-controls">
-      <el-button type="primary" :disabled="!canPlay" @click="togglePlay">
+      <el-button type="primary" size="small" :disabled="!canPlay" @click="togglePlay">
         {{ playing ? '暂停' : '播放' }}
       </el-button>
-      <el-button :disabled="!canPlay" @click="startFromForm">从头播放</el-button>
+      <el-button size="small" :disabled="!canPlay" @click="startFromForm">从头播放</el-button>
     </div>
   </div>
 </template>
@@ -269,5 +286,11 @@ defineExpose({ startFromForm, play, pause, togglePlay });
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.combo-preview-player.compact .preview-stage {
+  min-height: 180px;
+}
+.combo-preview-player.compact .preview-stage img {
+  max-height: 280px;
 }
 </style>

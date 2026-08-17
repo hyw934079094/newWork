@@ -14,8 +14,10 @@ import com.story.admin.dto.ArcReadingStreamResponse;
 import com.story.admin.dto.ArcUpdateRequest;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.PageAssetRefRepository;
+import com.story.admin.repository.PageComboRefRepository;
 import com.story.admin.repository.StoryArcRepository;
 import com.story.admin.repository.StoryPageRepository;
+import com.story.admin.dto.ComboDetailResponse;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,6 +43,8 @@ public class ArcService {
   private final AssetRepository assetRepository;
   private final StoryPageRepository pageRepository;
   private final PageAssetRefRepository pageAssetRefRepository;
+  private final PageComboRefRepository pageComboRefRepository;
+  private final ComboService comboService;
   private final ObjectMapper objectMapper;
 
   public ArcService(
@@ -49,12 +53,16 @@ public class ArcService {
       AssetRepository assetRepository,
       StoryPageRepository pageRepository,
       PageAssetRefRepository pageAssetRefRepository,
+      PageComboRefRepository pageComboRefRepository,
+      ComboService comboService,
       ObjectMapper objectMapper) {
     this.repo = repo;
     this.seriesService = seriesService;
     this.assetRepository = assetRepository;
     this.pageRepository = pageRepository;
     this.pageAssetRefRepository = pageAssetRefRepository;
+    this.pageComboRefRepository = pageComboRefRepository;
+    this.comboService = comboService;
     this.objectMapper = objectMapper;
   }
 
@@ -103,8 +111,10 @@ public class ArcService {
     List<StoryPage> pages = pageRepository.findByArcId(id);
     for (StoryPage page : pages) {
       pageAssetRefRepository.deleteByPageId(page.getId());
+      pageComboRefRepository.deleteByPageId(page.getId());
     }
     pageAssetRefRepository.flush();
+    pageComboRefRepository.flush();
     pageRepository.deleteAll(pages);
     pageRepository.flush();
     repo.deleteById(id);
@@ -187,20 +197,22 @@ public class ArcService {
   private void appendBeatSegments(
       List<Map<String, Object>> segments, Long pageId, JsonNode beat) {
     JsonNode children = beat.get("children");
-    boolean hasCoverChild = false;
+    boolean hasVisualChild = false;
     if (children != null && !children.isNull() && children.isArray()) {
       for (JsonNode child : children) {
-        if (child != null
-            && child.isObject()
-            && "COVER".equals(child.path("type").asText(null))) {
-          hasCoverChild = true;
+        if (child == null || !child.isObject()) {
+          continue;
+        }
+        String t = child.path("type").asText(null);
+        if ("COVER".equals(t) || "COMBO".equals(t)) {
+          hasVisualChild = true;
           break;
         }
       }
     }
 
-    if (!hasCoverChild) {
-      appendBeatImageFromCoverAssetId(segments, pageId, beat);
+    if (!hasVisualChild) {
+      appendBeatImageFromCoverAssetId(segments, pageId, beat, "BEAT_COVER", null, null);
     }
 
     if (children == null || children.isNull() || !children.isArray()) {
@@ -214,8 +226,11 @@ public class ArcService {
       if ("COVER".equals(childType)) {
         JsonNode assetIdNode = child.get("assetId");
         if (assetIdNode != null && !assetIdNode.isNull() && assetIdNode.isIntegralNumber()) {
-          appendBeatImage(segments, pageId, assetIdNode.asLong());
+          appendBeatImage(
+              segments, pageId, assetIdNode.asLong(), "BEAT_COVER", null, null);
         }
+      } else if ("COMBO".equals(childType)) {
+        appendComboFrames(segments, pageId, child);
       } else if ("BODY".equals(childType) || "DIALOGUE".equals(childType)) {
         Map<String, Object> seg = new LinkedHashMap<>();
         seg.put("type", childType);
@@ -226,21 +241,73 @@ public class ArcService {
     }
   }
 
-  private void appendBeatImageFromCoverAssetId(
-      List<Map<String, Object>> segments, Long pageId, JsonNode beat) {
-    JsonNode coverNode = beat.get("coverAssetId");
-    if (coverNode != null && !coverNode.isNull() && coverNode.isIntegralNumber()) {
-      appendBeatImage(segments, pageId, coverNode.asLong());
+  private void appendComboFrames(
+      List<Map<String, Object>> segments, Long pageId, JsonNode comboChild) {
+    JsonNode comboIdNode = comboChild.get("comboId");
+    if (comboIdNode == null || comboIdNode.isNull() || !comboIdNode.isIntegralNumber()) {
+      return;
+    }
+    long comboId = comboIdNode.asLong();
+    ComboDetailResponse combo;
+    try {
+      combo = comboService.get(comboId);
+    } catch (ResponseStatusException ex) {
+      log.warn("combo {} missing in reading-stream: {}", comboId, ex.getMessage());
+      return;
+    }
+    if (combo.members() == null || combo.members().isEmpty()) {
+      return;
+    }
+    Map<Integer, Long> assetByNo = new java.util.HashMap<>();
+    for (ComboDetailResponse.MemberView member : combo.members()) {
+      assetByNo.put(member.memberNo(), member.assetId());
+    }
+    List<Integer> steps =
+        PageService.parsePlaySequence(combo.playSequence(), assetByNo.keySet());
+    int stepIndex = 0;
+    for (Integer memberNo : steps) {
+      stepIndex++;
+      Long assetId = assetByNo.get(memberNo);
+      if (assetId == null) {
+        continue;
+      }
+      appendBeatImage(
+          segments, pageId, assetId, "BEAT_COMBO_FRAME", comboId, stepIndex);
     }
   }
 
-  private void appendBeatImage(List<Map<String, Object>> segments, Long pageId, long assetId) {
+  private void appendBeatImageFromCoverAssetId(
+      List<Map<String, Object>> segments,
+      Long pageId,
+      JsonNode beat,
+      String role,
+      Long comboId,
+      Integer stepIndex) {
+    JsonNode coverNode = beat.get("coverAssetId");
+    if (coverNode != null && !coverNode.isNull() && coverNode.isIntegralNumber()) {
+      appendBeatImage(segments, pageId, coverNode.asLong(), role, comboId, stepIndex);
+    }
+  }
+
+  private void appendBeatImage(
+      List<Map<String, Object>> segments,
+      Long pageId,
+      long assetId,
+      String role,
+      Long comboId,
+      Integer stepIndex) {
     Map<String, Object> image = new LinkedHashMap<>();
     image.put("type", "IMAGE");
     image.put("pageId", pageId);
     image.put("assetId", assetId);
     image.put("contentPath", contentPath(assetId));
-    image.put("role", "BEAT_COVER");
+    image.put("role", role);
+    if (comboId != null) {
+      image.put("comboId", comboId);
+    }
+    if (stepIndex != null) {
+      image.put("stepIndex", stepIndex);
+    }
     segments.add(image);
   }
 

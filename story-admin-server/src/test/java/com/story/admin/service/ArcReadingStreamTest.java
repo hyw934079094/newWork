@@ -45,6 +45,7 @@ class ArcReadingStreamTest {
   @Autowired ArcService arcService;
   @Autowired SeriesService seriesService;
   @Autowired PageService pageService;
+  @Autowired ComboService comboService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
 
@@ -121,6 +122,51 @@ class ArcReadingStreamTest {
     List<String> types = stream.segments().stream().map(s -> (String) s.get("type")).toList();
     assertThat(types)
         .containsExactly("ARC_TITLE", "PAGE_TITLE", "BODY", "IMAGE", "DIALOGUE");
+  }
+
+  @Test
+  void readingStreamExpandsComboIntoSequentialImages() {
+    Long seriesId =
+        seriesService.create(new SeriesCreateRequest("阅读流组合", null, null, null, null)).getId();
+    StoryArc arc = arcService.create(seriesId, new ArcCreateRequest("卷", null, null, null));
+    Asset a1 = persistAsset("combo-a1");
+    Asset a2 = persistAsset("combo-a2");
+
+    var combo =
+        comboService.create(
+            new com.story.admin.dto.ComboUpsertRequest(
+                "切帧组合",
+                "1,2,1",
+                new java.math.BigDecimal("0.5"),
+                true,
+                null,
+                List.of(
+                    new com.story.admin.dto.ComboMemberRequest(a1.getId(), 1),
+                    new com.story.admin.dto.ComboMemberRequest(a2.getId(), 2)),
+                List.of()));
+
+    StoryPage page = pageService.create(arc.getId(), new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":"
+            + a1.getId()
+            + ",\"children\":[{\"type\":\"BODY\",\"text\":\"先\"},{\"type\":\"COMBO\",\"comboId\":"
+            + combo.id()
+            + "}]}]";
+    pageService.update(page.getId(), new PageUpdateRequest("P1", json));
+
+    ArcReadingStreamResponse stream = arcService.readingStream(arc.getId());
+    List<String> types = stream.segments().stream().map(s -> (String) s.get("type")).toList();
+    assertThat(types)
+        .containsExactly("ARC_TITLE", "PAGE_TITLE", "BODY", "IMAGE", "IMAGE", "IMAGE");
+
+    List<Map<String, Object>> images =
+        stream.segments().stream().filter(s -> "IMAGE".equals(s.get("type"))).toList();
+    assertThat(images).hasSize(3);
+    assertThat(images.get(0).get("role")).isEqualTo("BEAT_COMBO_FRAME");
+    assertThat(images.get(0).get("assetId")).isEqualTo(a1.getId());
+    assertThat(images.get(1).get("assetId")).isEqualTo(a2.getId());
+    assertThat(images.get(2).get("assetId")).isEqualTo(a1.getId());
+    assertThat(images.get(0).get("comboId")).isEqualTo(combo.id());
   }
 
   @Test

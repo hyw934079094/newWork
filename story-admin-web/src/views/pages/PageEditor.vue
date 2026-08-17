@@ -5,18 +5,21 @@ import { ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
 import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
+import { listCombos, type ComboDetail } from '../../api/combo';
 import { getPage, updatePage } from '../../api/page';
 import PagePreview, { type PagePreviewItem } from './PagePreview.vue';
 
 type TopType = 'TITLE' | 'BODY' | 'DIVIDER' | 'BEAT';
-type ChildType = 'COVER' | 'BODY' | 'DIALOGUE';
+type ChildType = 'COVER' | 'BODY' | 'DIALOGUE' | 'COMBO';
 type TextChildType = 'BODY' | 'DIALOGUE';
+type VisualChildType = 'COVER' | 'COMBO';
 
 interface ChildItem {
   uid: string;
   type: ChildType;
   text: string;
   assetId: number | null;
+  comboId: number | null;
 }
 
 interface TimelineItem {
@@ -24,6 +27,8 @@ interface TimelineItem {
   type: TopType;
   text: string;
   children: ChildItem[];
+  /** Preserved for COMBO beats; backend syncs first-frame cover. */
+  coverAssetId?: number | null;
 }
 
 const TOP_LABELS: Record<TopType, string> = {
@@ -58,20 +63,39 @@ const pickerLoading = ref(false);
 const pickerBeatUid = ref<string | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 
+const comboPickerVisible = ref(false);
+const comboPickerLoading = ref(false);
+const comboPickerBeatUid = ref<string | null>(null);
+const comboPickerSelectedId = ref<number | null>(null);
+const comboOptions = ref<ComboDetail[]>([]);
+
+const comboNameById = computed(() => {
+  const map = new Map<number, string>();
+  for (const combo of comboOptions.value) {
+    map.set(combo.id, combo.name);
+  }
+  return map;
+});
+
 const previewItems = computed<PagePreviewItem[]>(() =>
   items.value.map((item) => {
     if (item.type !== 'BEAT') {
       return { type: item.type, text: item.text };
     }
-    const cover = findCover(item);
+    const visual = findVisual(item);
     return {
       type: 'BEAT',
-      coverAssetId: cover?.assetId ?? null,
-      children: item.children.map((child) =>
-        child.type === 'COVER'
-          ? { type: 'COVER', assetId: child.assetId }
-          : { type: child.type, text: child.text },
-      ),
+      coverAssetId:
+        visual?.type === 'COVER' ? (visual.assetId ?? null) : (item.coverAssetId ?? null),
+      children: item.children.map((child) => {
+        if (child.type === 'COVER') {
+          return { type: 'COVER', assetId: child.assetId };
+        }
+        if (child.type === 'COMBO') {
+          return { type: 'COMBO', comboId: child.comboId };
+        }
+        return { type: child.type, text: child.text };
+      }),
     };
   }),
 );
@@ -101,11 +125,44 @@ function findCover(item: TimelineItem): ChildItem | undefined {
   return item.children.find((c) => c.type === 'COVER');
 }
 
+function findVisual(item: TimelineItem): ChildItem | undefined {
+  return item.children.find((c) => c.type === 'COVER' || c.type === 'COMBO');
+}
+
+function isVisualType(type: ChildType): type is VisualChildType {
+  return type === 'COVER' || type === 'COMBO';
+}
+
 function ensureCoverChild(children: ChildItem[], coverAssetId: number | null): ChildItem[] {
+  const hasCombo = children.some((c) => c.type === 'COMBO');
+  if (hasCombo) {
+    const result: ChildItem[] = [];
+    let comboPlaced = false;
+    for (const child of children) {
+      if (child.type === 'COVER') {
+        continue;
+      }
+      if (child.type === 'COMBO') {
+        if (comboPlaced) continue;
+        result.push(child);
+        comboPlaced = true;
+        continue;
+      }
+      result.push(child);
+    }
+    return result;
+  }
+
   const coverCount = children.filter((c) => c.type === 'COVER').length;
   if (coverCount === 0) {
     return [
-      { uid: nextUid(), type: 'COVER', text: '', assetId: coverAssetId },
+      {
+        uid: nextUid(),
+        type: 'COVER',
+        text: '',
+        assetId: coverAssetId,
+        comboId: null,
+      },
       ...children,
     ];
   }
@@ -122,6 +179,7 @@ function ensureCoverChild(children: ChildItem[], coverAssetId: number | null): C
     result.push({
       ...child,
       assetId: child.assetId ?? coverAssetId,
+      comboId: null,
     });
     coverPlaced = true;
   }
@@ -138,6 +196,17 @@ function parseChild(node: unknown): ChildItem | null {
       type: 'COVER',
       text: '',
       assetId: typeof asset === 'number' && Number.isFinite(asset) ? asset : null,
+      comboId: null,
+    };
+  }
+  if (obj.type === 'COMBO') {
+    const combo = obj.comboId;
+    return {
+      uid: nextUid(),
+      type: 'COMBO',
+      text: '',
+      assetId: null,
+      comboId: typeof combo === 'number' && Number.isFinite(combo) ? combo : null,
     };
   }
   if (obj.type === 'DIALOGUE' || obj.type === 'BODY') {
@@ -146,6 +215,7 @@ function parseChild(node: unknown): ChildItem | null {
       type: obj.type,
       text: typeof obj.text === 'string' ? obj.text : '',
       assetId: null,
+      comboId: null,
     };
   }
   return null;
@@ -168,6 +238,7 @@ function parseTop(node: unknown): TimelineItem | null {
       uid: nextUid(),
       type: 'BEAT',
       text: '',
+      coverAssetId,
       children: ensureCoverChild(parsed, coverAssetId),
     };
   }
@@ -202,15 +273,21 @@ function parseContent(raw?: string | null): TimelineItem[] {
 function serializeItems(list: TimelineItem[]): unknown[] {
   return list.map((item) => {
     if (item.type === 'BEAT') {
-      const cover = findCover(item);
+      const visual = findVisual(item);
+      const coverAssetId =
+        visual?.type === 'COVER' ? (visual.assetId ?? null) : (item.coverAssetId ?? null);
       return {
         type: 'BEAT',
-        coverAssetId: cover?.assetId ?? null,
-        children: item.children.map((child) =>
-          child.type === 'COVER'
-            ? { type: 'COVER', assetId: child.assetId }
-            : { type: child.type, text: child.text },
-        ),
+        coverAssetId,
+        children: item.children.map((child) => {
+          if (child.type === 'COVER') {
+            return { type: 'COVER', assetId: child.assetId };
+          }
+          if (child.type === 'COMBO') {
+            return { type: 'COMBO', comboId: child.comboId };
+          }
+          return { type: child.type, text: child.text };
+        }),
       };
     }
     if (item.type === 'DIVIDER') {
@@ -226,7 +303,10 @@ function createTop(type: TopType): TimelineItem {
       uid: nextUid(),
       type: 'BEAT',
       text: '',
-      children: [{ uid: nextUid(), type: 'COVER', text: '', assetId: null }],
+      coverAssetId: null,
+      children: [
+        { uid: nextUid(), type: 'COVER', text: '', assetId: null, comboId: null },
+      ],
     };
   }
   return {
@@ -258,13 +338,16 @@ function moveTop(index: number, dir: -1 | 1) {
 }
 
 function addChild(item: TimelineItem, type: TextChildType) {
-  item.children = [...item.children, { uid: nextUid(), type, text: '', assetId: null }];
+  item.children = [
+    ...item.children,
+    { uid: nextUid(), type, text: '', assetId: null, comboId: null },
+  ];
 }
 
 function removeChild(item: TimelineItem, index: number) {
   const child = item.children[index];
-  if (child?.type === 'COVER') {
-    ElMessage.warning('封面节点不可删除，可清除或更换素材');
+  if (child && isVisualType(child.type)) {
+    ElMessage.warning('视觉节点不可删除，可切换封面/组合或重新选择');
     return;
   }
   item.children = item.children.filter((_, i) => i !== index);
@@ -282,11 +365,58 @@ function moveChild(item: TimelineItem, index: number, dir: -1 | 1) {
   item.children = copy;
 }
 
+function replaceVisual(
+  item: TimelineItem,
+  visual: ChildItem,
+) {
+  const existing = findVisual(item);
+  if (!existing) {
+    item.children = [visual, ...item.children];
+    return;
+  }
+  const idx = item.children.findIndex((c) => c.uid === existing.uid);
+  if (idx < 0) {
+    item.children = [visual, ...item.children];
+    return;
+  }
+  const copy = [...item.children];
+  copy[idx] = { ...visual, uid: existing.uid };
+  item.children = copy;
+}
+
+function setVisualAsCover(item: TimelineItem, assetId: number | null) {
+  replaceVisual(item, {
+    uid: nextUid(),
+    type: 'COVER',
+    text: '',
+    assetId,
+    comboId: null,
+  });
+  item.coverAssetId = assetId;
+}
+
+function setVisualAsCombo(item: TimelineItem, comboId: number | null) {
+  replaceVisual(item, {
+    uid: nextUid(),
+    type: 'COMBO',
+    text: '',
+    assetId: null,
+    comboId,
+  });
+}
+
 function clearCover(item: TimelineItem) {
   const cover = findCover(item);
   if (cover) {
     cover.assetId = null;
+    item.coverAssetId = null;
   }
+}
+
+function comboLabel(child: ChildItem): string {
+  if (child.comboId == null) return '未选择组合';
+  const name = comboNameById.value.get(child.comboId);
+  return name ? `${name}（#${child.comboId}）` : `组合 #${child.comboId}`;
 }
 
 async function openCoverPicker(item: TimelineItem) {
@@ -299,6 +429,11 @@ async function openCoverPicker(item: TimelineItem) {
     categories.value = await listCategories();
   }
   await loadPickerAssets();
+}
+
+async function convertToCoverAndPick(item: TimelineItem) {
+  setVisualAsCover(item, item.coverAssetId ?? null);
+  await openCoverPicker(item);
 }
 
 async function loadPickerAssets() {
@@ -325,14 +460,42 @@ function isPickerSelected(id: number): boolean {
 function confirmCoverPicker() {
   const target = items.value.find((item) => item.uid === pickerBeatUid.value);
   if (target) {
-    let cover = findCover(target);
-    if (!cover) {
-      cover = { uid: nextUid(), type: 'COVER', text: '', assetId: null };
-      target.children = [cover, ...target.children];
-    }
-    cover.assetId = pickerSelectedId.value;
+    setVisualAsCover(target, pickerSelectedId.value);
   }
   pickerVisible.value = false;
+}
+
+async function openComboPicker(item: TimelineItem) {
+  comboPickerBeatUid.value = item.uid;
+  const visual = findVisual(item);
+  comboPickerSelectedId.value = visual?.type === 'COMBO' ? (visual.comboId ?? null) : null;
+  comboPickerVisible.value = true;
+  await loadComboOptions();
+}
+
+async function loadComboOptions() {
+  comboPickerLoading.value = true;
+  try {
+    comboOptions.value = await listCombos();
+  } finally {
+    comboPickerLoading.value = false;
+  }
+}
+
+function selectPickerCombo(id: number) {
+  comboPickerSelectedId.value = comboPickerSelectedId.value === id ? null : id;
+}
+
+function isComboPickerSelected(id: number): boolean {
+  return comboPickerSelectedId.value === id;
+}
+
+function confirmComboPicker() {
+  const target = items.value.find((item) => item.uid === comboPickerBeatUid.value);
+  if (target) {
+    setVisualAsCombo(target, comboPickerSelectedId.value);
+  }
+  comboPickerVisible.value = false;
 }
 
 async function load() {
@@ -350,6 +513,12 @@ async function load() {
     title.value = page.title ?? '';
     arcId.value = page.arcId ?? null;
     items.value = parseContent(page.contentJson);
+    const hasCombo = items.value.some(
+      (item) => item.type === 'BEAT' && item.children.some((c) => c.type === 'COMBO'),
+    );
+    if (hasCombo && !comboOptions.value.length) {
+      void loadComboOptions();
+    }
   } catch (e: unknown) {
     ElMessage.error(apiError(e, '加载页面失败'));
   } finally {
@@ -375,13 +544,20 @@ async function save() {
     ElMessage.warning('请填写页面标题');
     return;
   }
-  const missingCover = items.value.find((item) => {
+  const missingVisual = items.value.find((item) => {
     if (item.type !== 'BEAT') return false;
-    const cover = findCover(item);
-    return cover == null || cover.assetId == null || !Number.isInteger(cover.assetId);
+    const visual = findVisual(item);
+    if (!visual) return true;
+    if (visual.type === 'COVER') {
+      return visual.assetId == null || !Number.isInteger(visual.assetId);
+    }
+    if (visual.type === 'COMBO') {
+      return visual.comboId == null || !Number.isInteger(visual.comboId);
+    }
+    return true;
   });
-  if (missingCover) {
-    ElMessage.warning('画面组必须选择封面素材');
+  if (missingVisual) {
+    ElMessage.warning('画面组必须选择封面素材或组合');
     return;
   }
   saving.value = true;
@@ -488,7 +664,7 @@ onMounted(() => {
 
               <div v-else-if="item.type === 'BEAT'" class="beat-editor">
                 <div class="child-head">
-                  <span>组内块（封面可拖到文上/文下）</span>
+                  <span>组内块（封面/组合可拖到文上/文下）</span>
                   <div class="child-add">
                     <el-button size="small" @click="addChild(item, 'BODY')">添加正文</el-button>
                     <el-button size="small" @click="addChild(item, 'DIALOGUE')">添加对话</el-button>
@@ -502,11 +678,18 @@ onMounted(() => {
                   class="child-list"
                 >
                   <template #item="{ element: child, index: ci }">
-                    <div class="child-card" :class="{ 'is-cover': child.type === 'COVER' }">
+                    <div
+                      class="child-card"
+                      :class="{
+                        'is-cover': child.type === 'COVER',
+                        'is-combo': child.type === 'COMBO',
+                      }"
+                    >
                       <div class="card-head">
                         <div class="card-head-left">
                           <span class="drag-handle" title="拖拽排序">⋮⋮</span>
                           <span v-if="child.type === 'COVER'" class="type-badge cover-badge">封面</span>
+                          <span v-else-if="child.type === 'COMBO'" class="type-badge combo-badge">组合</span>
                           <el-select
                             v-else
                             v-model="child.type"
@@ -539,7 +722,7 @@ onMounted(() => {
                             下移
                           </el-button>
                           <el-button
-                            v-if="child.type !== 'COVER'"
+                            v-if="!isVisualType(child.type)"
                             link
                             type="danger"
                             @click="removeChild(item, ci)"
@@ -560,12 +743,22 @@ onMounted(() => {
                         </div>
                         <div class="cover-actions">
                           <el-button size="small" @click="openCoverPicker(item)">选择封面</el-button>
+                          <el-button size="small" @click="openComboPicker(item)">选择组合</el-button>
                           <el-button
                             size="small"
                             :disabled="child.assetId == null"
                             @click="clearCover(item)"
                           >
                             清除
+                          </el-button>
+                        </div>
+                      </div>
+                      <div v-else-if="child.type === 'COMBO'" class="combo-editor">
+                        <p class="combo-summary">{{ comboLabel(child) }}</p>
+                        <div class="cover-actions">
+                          <el-button size="small" @click="openComboPicker(item)">选择组合</el-button>
+                          <el-button size="small" @click="convertToCoverAndPick(item)">
+                            改为静图封面
                           </el-button>
                         </div>
                       </div>
@@ -653,6 +846,43 @@ onMounted(() => {
           <div class="picker-footer-actions">
             <el-button @click="pickerVisible = false">取消</el-button>
             <el-button type="primary" @click="confirmCoverPicker">确定</el-button>
+          </div>
+        </div>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="comboPickerVisible"
+      title="选择组合"
+      width="560px"
+      append-to-body
+      destroy-on-close
+    >
+      <div v-loading="comboPickerLoading" class="combo-picker-list">
+        <button
+          v-for="combo in comboOptions"
+          :key="combo.id"
+          type="button"
+          class="combo-picker-row"
+          :class="{ 'is-selected': isComboPickerSelected(combo.id) }"
+          @click="selectPickerCombo(combo.id)"
+        >
+          <span class="combo-picker-name">{{ combo.name }}</span>
+          <span class="combo-picker-meta">成员 {{ combo.members?.length ?? 0 }} · #{{ combo.id }}</span>
+        </button>
+        <p v-if="!comboPickerLoading && !comboOptions.length" class="hint picker-empty">
+          暂无可用组合
+        </p>
+      </div>
+
+      <template #footer>
+        <div class="picker-footer">
+          <span class="picker-count">
+            {{ comboPickerSelectedId != null ? '已选 1 项' : '未选择' }}
+          </span>
+          <div class="picker-footer-actions">
+            <el-button @click="comboPickerVisible = false">取消</el-button>
+            <el-button type="primary" @click="confirmComboPicker">确定</el-button>
           </div>
         </div>
       </template>
@@ -782,6 +1012,10 @@ onMounted(() => {
   background: #eef8f1;
   color: #2f7a4a;
 }
+.combo-badge {
+  background: #eef3ff;
+  color: #3a6ff0;
+}
 .card-actions {
   display: inline-flex;
   align-items: center;
@@ -857,6 +1091,64 @@ onMounted(() => {
   border-style: solid;
   border-color: #c5dccb;
   background: #f7fbf8;
+}
+.child-card.is-combo {
+  border-style: solid;
+  border-color: #c5d0f0;
+  background: #f7f9ff;
+}
+.combo-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.combo-summary {
+  margin: 0;
+  color: #33415f;
+  font-size: 13px;
+}
+.combo-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.combo-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: #f7f9fc;
+  box-shadow: 0 2px 10px #24325210;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.combo-picker-row:hover {
+  border-color: #a8c0f5;
+}
+.combo-picker-row.is-selected {
+  border-color: #3a6ff0;
+  box-shadow: 0 0 0 1px #3a6ff0, 0 2px 10px #24325214;
+  background: #f3f7ff;
+}
+.combo-picker-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #243252;
+}
+.combo-picker-meta {
+  color: #6f7e9d;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .child-type {
   width: 108px;

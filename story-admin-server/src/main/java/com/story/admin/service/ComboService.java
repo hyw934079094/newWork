@@ -13,6 +13,7 @@ import com.story.admin.repository.AssetComboMemberRepository;
 import com.story.admin.repository.AssetComboRepository;
 import com.story.admin.repository.AssetComboStepHoldRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.PageComboRefRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -35,16 +36,19 @@ public class ComboService {
   private final AssetComboMemberRepository memberRepository;
   private final AssetComboStepHoldRepository stepHoldRepository;
   private final AssetRepository assetRepository;
+  private final PageComboRefRepository pageComboRefRepository;
 
   public ComboService(
       AssetComboRepository comboRepository,
       AssetComboMemberRepository memberRepository,
       AssetComboStepHoldRepository stepHoldRepository,
-      AssetRepository assetRepository) {
+      AssetRepository assetRepository,
+      PageComboRefRepository pageComboRefRepository) {
     this.comboRepository = comboRepository;
     this.memberRepository = memberRepository;
     this.stepHoldRepository = stepHoldRepository;
     this.assetRepository = assetRepository;
+    this.pageComboRefRepository = pageComboRefRepository;
   }
 
   public List<ComboDetailResponse> list() {
@@ -71,6 +75,10 @@ public class ComboService {
   @Transactional
   public void delete(Long id) {
     requireCombo(id);
+    if (pageComboRefRepository.existsByComboId(id)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "combo is referenced by story pages");
+    }
     stepHoldRepository.deleteByComboId(id);
     memberRepository.deleteByComboId(id);
     comboRepository.deleteById(id);
