@@ -27,64 +27,94 @@ body {
 .shell > aside nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  line-height: 2.2;
-  color: #cbd4e8;
-}
-.shell > aside nav a {
-  color: #cbd4e8;
-  text-decoration: none;
-}
-.shell > aside nav a.router-link-active {
-  color: #fff;
-  font-weight: 600;
-}
-.shell > aside nav .nav-group {
-  display: flex;
-  flex-direction: column;
   gap: 2px;
-  margin-top: 4px;
+  line-height: 1.4;
+  color: #cbd4e8;
 }
+/* 一级：直达链接与分组标题同列、同字号 */
+.shell > aside nav > a,
 .shell > aside nav .nav-group-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  box-sizing: border-box;
   margin: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #c5cee0;
+  color: #e2e8f5;
   font: inherit;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  line-height: 1.4;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
+.shell > aside nav > a:hover,
 .shell > aside nav .nav-group-title:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
+.shell > aside nav > a:focus-visible,
+.shell > aside nav .nav-group-title:focus-visible {
+  outline: 2px solid rgba(158, 182, 255, 0.7);
+  outline-offset: 1px;
+}
+.shell > aside nav .nav-group-title:focus:not(:focus-visible) {
+  outline: none;
+}
+.shell > aside nav > a.router-link-active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.shell > aside nav .nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  width: 100%;
+}
 .shell > aside nav .nav-caret {
-  font-size: 11px;
-  opacity: 0.75;
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 12px;
+  opacity: 0.7;
   transition: transform 0.15s ease;
 }
 .shell > aside nav .nav-group:not(.open) .nav-caret {
   transform: rotate(-90deg);
 }
+/* 二级：略小、缩进，不与一级抢视觉权重 */
 .shell > aside nav .nav-children {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-left: 12px;
+  margin: 0 0 4px;
+  padding: 2px 0 2px 12px;
   border-left: 1px solid #31405f;
-  margin: 2px 0 8px 4px;
+  margin-left: 12px;
 }
 .shell > aside nav .nav-children a {
-  padding-left: 8px;
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #aeb8cf;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.shell > aside nav .nav-children a:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.shell > aside nav .nav-children a.router-link-active {
+  color: #fff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
 }
 main {
   padding: 56px;
