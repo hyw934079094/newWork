@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import {
+  arcReadingStreamUrl,
   createArc,
   deleteArc,
   listArcs,
@@ -233,6 +234,20 @@ function goPreview(row: ArcItem) {
   void router.push(`/arcs/${row.id}/preview`);
 }
 
+async function copyReadingStreamUrl(row: ArcItem) {
+  if (row.id == null) {
+    ElMessage.warning('无效的篇章');
+    return;
+  }
+  const url = `${window.location.origin}${arcReadingStreamUrl(row.id)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    ElMessage.success('AI 阅读流链接已复制');
+  } catch {
+    ElMessage.error('复制失败，请手动复制');
+  }
+}
+
 function goSeries() {
   void router.push('/series');
 }
@@ -266,7 +281,7 @@ onMounted(async () => {
         <el-input
           v-model="filters.q"
           clearable
-          placeholder="标题 / 编号"
+          placeholder="标题"
           class="filter-control filter-control--wide"
         />
       </el-form-item>
@@ -310,19 +325,27 @@ onMounted(async () => {
           <span v-else class="cover-placeholder">无</span>
         </template>
       </el-table-column>
-      <el-table-column prop="code" label="编号" width="100" />
       <el-table-column prop="title" label="标题" min-width="140" show-overflow-tooltip />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           {{ statusLabel(row.status) }}
         </template>
       </el-table-column>
-      <el-table-column prop="summary" label="简介" min-width="180" show-overflow-tooltip />
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column
+        prop="summary"
+        label="简介"
+        min-width="180"
+        :show-overflow-tooltip="{
+          popperClass: 'arc-summary-tooltip',
+          placement: 'top',
+        }"
+      />
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <div class="row-actions">
             <el-button link type="primary" @click="goPages(row)">页面</el-button>
             <el-button link type="primary" @click="goPreview(row)">预览</el-button>
+            <el-button link type="primary" @click="copyReadingStreamUrl(row)">复制</el-button>
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="remove(row)">删除</el-button>
           </div>
@@ -625,5 +648,16 @@ onMounted(async () => {
 .picker-footer-actions {
   display: flex;
   gap: 8px;
+}
+</style>
+
+<style>
+/* Tooltip teleports to body — keep a readable fixed width */
+.arc-summary-tooltip {
+  max-width: 360px !important;
+  width: 360px;
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  line-height: 1.5;
 }
 </style>
