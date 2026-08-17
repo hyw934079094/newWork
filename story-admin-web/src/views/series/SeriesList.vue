@@ -214,7 +214,7 @@ onMounted(load);
     <div class="header">
       <div>
         <p class="eyebrow">SERIES</p>
-        <h2>故事系列</h2>
+        <h2>故事管理</h2>
       </div>
       <el-button type="primary" @click="openCreate">新增系列</el-button>
     </div>

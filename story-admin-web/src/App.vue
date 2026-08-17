@@ -7,10 +7,37 @@
       <h1>故事管理台</h1>
       <nav>
         <RouterLink to="/">概览</RouterLink>
-        <span class="nav-muted">故事管理</span>
-        <div class="nav-group">
-          <div class="nav-group-title">素材管理</div>
-          <div class="nav-children">
+
+        <div class="nav-group" :class="{ open: isGroupOpen('story') }">
+          <button
+            type="button"
+            class="nav-group-title"
+            :aria-expanded="isGroupOpen('story')"
+            @click="toggleGroup('story')"
+          >
+            <span>故事管理</span>
+            <span class="nav-caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-show="isGroupOpen('story')" class="nav-children">
+            <RouterLink
+              to="/series"
+              active-class=""
+              exact-active-class="router-link-active"
+            >系列列表</RouterLink>
+          </div>
+        </div>
+
+        <div class="nav-group" :class="{ open: isGroupOpen('assets') }">
+          <button
+            type="button"
+            class="nav-group-title"
+            :aria-expanded="isGroupOpen('assets')"
+            @click="toggleGroup('assets')"
+          >
+            <span>素材管理</span>
+            <span class="nav-caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-show="isGroupOpen('assets')" class="nav-children">
             <RouterLink
               to="/assets"
               active-class=""
@@ -24,11 +51,20 @@
             <RouterLink to="/assets/combos">组合编排</RouterLink>
           </div>
         </div>
+
         <RouterLink to="/ai-reference">AI 参考区</RouterLink>
-        <RouterLink to="/series">故事系列</RouterLink>
-        <div class="nav-group">
-          <div class="nav-group-title">人物管理</div>
-          <div class="nav-children">
+
+        <div class="nav-group" :class="{ open: isGroupOpen('characters') }">
+          <button
+            type="button"
+            class="nav-group-title"
+            :aria-expanded="isGroupOpen('characters')"
+            @click="toggleGroup('characters')"
+          >
+            <span>人物管理</span>
+            <span class="nav-caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-show="isGroupOpen('characters')" class="nav-children">
             <RouterLink
               to="/characters"
               active-class=""
@@ -37,6 +73,7 @@
             <RouterLink to="/character-identities">人物本体</RouterLink>
           </div>
         </div>
+
         <RouterLink to="/recycle">回收站</RouterLink>
         <RouterLink to="/config">系统配置</RouterLink>
       </nav>
@@ -70,10 +107,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { changePassword, logout, useAuthState } from './auth/session';
+
+type NavGroupId = 'story' | 'assets' | 'characters';
+
+const NAV_OPEN_KEY = 'story-admin-nav-open';
 
 const route = useRoute();
 const router = useRouter();
@@ -87,6 +128,75 @@ const displayName = computed(
 const pwdVisible = ref(false);
 const pwdSaving = ref(false);
 const pwdForm = reactive({ current: '', next: '' });
+
+const groupOpen = reactive<Record<NavGroupId, boolean>>({
+  story: true,
+  assets: true,
+  characters: true,
+});
+
+function loadNavOpenState() {
+  try {
+    const raw = sessionStorage.getItem(NAV_OPEN_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Partial<Record<NavGroupId, boolean>>;
+    for (const key of Object.keys(groupOpen) as NavGroupId[]) {
+      if (typeof parsed[key] === 'boolean') {
+        groupOpen[key] = parsed[key]!;
+      }
+    }
+  } catch {
+    // ignore bad storage
+  }
+}
+
+function persistNavOpenState() {
+  sessionStorage.setItem(NAV_OPEN_KEY, JSON.stringify({ ...groupOpen }));
+}
+
+function isGroupOpen(id: NavGroupId): boolean {
+  return groupOpen[id];
+}
+
+function toggleGroup(id: NavGroupId) {
+  groupOpen[id] = !groupOpen[id];
+  persistNavOpenState();
+}
+
+function groupForPath(path: string): NavGroupId | null {
+  if (
+    path.startsWith('/series') ||
+    path.startsWith('/arcs') ||
+    path.startsWith('/pages')
+  ) {
+    return 'story';
+  }
+  if (path.startsWith('/assets')) {
+    return 'assets';
+  }
+  if (path.startsWith('/characters') || path.startsWith('/character-identities')) {
+    return 'characters';
+  }
+  return null;
+}
+
+function ensureActiveGroupOpen() {
+  const id = groupForPath(route.path);
+  if (id && !groupOpen[id]) {
+    groupOpen[id] = true;
+    persistNavOpenState();
+  }
+}
+
+loadNavOpenState();
+ensureActiveGroupOpen();
+
+watch(
+  () => route.path,
+  () => {
+    ensureActiveGroupOpen();
+  },
+);
 
 async function onLogout() {
   await logout();
