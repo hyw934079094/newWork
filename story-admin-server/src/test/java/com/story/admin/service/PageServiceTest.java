@@ -10,13 +10,19 @@ import com.story.admin.domain.PageAssetRef;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.domain.StoryPage;
 import com.story.admin.dto.ArcCreateRequest;
+import com.story.admin.dto.ComboMemberRequest;
+import com.story.admin.dto.ComboUpsertRequest;
 import com.story.admin.dto.PageCreateRequest;
 import com.story.admin.dto.PageUpdateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
 import com.story.admin.repository.AssetCategoryRepository;
+import com.story.admin.repository.AssetComboMemberRepository;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.PageAssetRefRepository;
+import com.story.admin.repository.PageComboRefRepository;
 import com.story.admin.repository.StoryPageRepository;
+import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,8 +51,11 @@ class PageServiceTest {
   @Autowired PageService pageService;
   @Autowired ArcService arcService;
   @Autowired SeriesService seriesService;
+  @Autowired ComboService comboService;
   @Autowired StoryPageRepository pageRepository;
   @Autowired PageAssetRefRepository pageAssetRefRepository;
+  @Autowired PageComboRefRepository pageComboRefRepository;
+  @Autowired AssetComboMemberRepository assetComboMemberRepository;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
 
@@ -126,6 +135,50 @@ class PageServiceTest {
 
     assertThat(pageRepository.findById(p.getId())).isEmpty();
     assertThat(pageAssetRefRepository.findByPageId(p.getId())).isEmpty();
+  }
+
+  @Test
+  void saveAllowsEmptyBeatCover() {
+    Long arcId = persistArc();
+    StoryPage p = pageService.create(arcId, new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":null,\"children\":[{\"type\":\"COVER\"},{\"type\":\"BODY\",\"text\":\"hi\"}]}]";
+    StoryPage saved = pageService.update(p.getId(), new PageUpdateRequest("P1", json));
+    assertThat(saved.getContentJson()).contains("COVER");
+    assertThat(saved.getContentJson()).contains("\"coverAssetId\":null");
+    assertThat(pageAssetRefRepository.findByPageId(p.getId()))
+        .extracting(PageAssetRef::getRefKind)
+        .doesNotContain("BEAT_COVER");
+  }
+
+  @Test
+  void saveAllowsComboWithZeroMembers() {
+    Long arcId = persistArc();
+    Long assetId = persistAsset("combo-then-detach").getId();
+    var combo =
+        comboService.create(
+            new ComboUpsertRequest(
+                "empty-members",
+                "1",
+                new BigDecimal("1.0"),
+                true,
+                null,
+                List.of(new ComboMemberRequest(assetId, 1)),
+                List.of()));
+    assetComboMemberRepository.deleteByComboId(combo.id());
+    assetComboMemberRepository.flush();
+
+    StoryPage p = pageService.create(arcId, new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":null,\"children\":[{\"type\":\"COMBO\",\"comboId\":"
+            + combo.id()
+            + "}]}]";
+    StoryPage saved = pageService.update(p.getId(), new PageUpdateRequest("P1", json));
+    assertThat(saved.getContentJson()).contains("\"coverAssetId\":null");
+    assertThat(pageComboRefRepository.existsByComboId(combo.id())).isTrue();
+    assertThat(pageAssetRefRepository.findByPageId(p.getId()))
+        .extracting(PageAssetRef::getRefKind)
+        .doesNotContain("BEAT_COMBO_MEMBER");
   }
 
   private Long persistArc() {

@@ -151,10 +151,14 @@ public class PageService {
     pageAssetRefRepository.flush();
     pageComboRefRepository.flush();
     for (Long assetId : refs.coverIds()) {
-      pageAssetRefRepository.save(new PageAssetRef(pageId, assetId, REF_KIND_BEAT_COVER));
+      if (assetId != null) {
+        pageAssetRefRepository.save(new PageAssetRef(pageId, assetId, REF_KIND_BEAT_COVER));
+      }
     }
     for (Long assetId : refs.comboMemberIds()) {
-      pageAssetRefRepository.save(new PageAssetRef(pageId, assetId, REF_KIND_BEAT_COMBO_MEMBER));
+      if (assetId != null) {
+        pageAssetRefRepository.save(new PageAssetRef(pageId, assetId, REF_KIND_BEAT_COMBO_MEMBER));
+      }
     }
     for (Long comboId : refs.comboIds()) {
       pageComboRefRepository.save(new PageComboRef(pageId, comboId));
@@ -247,8 +251,12 @@ public class PageService {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "BEAT COMBO comboId is required");
       }
       ComboDetailResponse combo = comboService.get(comboId);
-      Long firstFrame = firstFrameAssetId(combo);
-      beat.put("coverAssetId", firstFrame);
+      if (combo.members() == null || combo.members().isEmpty()) {
+        beat.putNull("coverAssetId");
+      } else {
+        Long firstFrame = firstFrameAssetId(combo);
+        beat.put("coverAssetId", firstFrame);
+      }
       return;
     }
 
@@ -262,15 +270,16 @@ public class PageService {
       cover.put("assetId", legacyId);
       children.insert(0, cover);
       coverFromChild = legacyId;
-    } else if (coverFromChild == null) {
-      if (legacyId == null) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "BEAT COVER assetId is required");
-      }
+    } else if (coverFromChild == null && legacyId != null) {
       ((ObjectNode) children.get(coverIndex)).put("assetId", legacyId);
       coverFromChild = legacyId;
     }
 
-    beat.put("coverAssetId", coverFromChild);
+    if (coverFromChild == null) {
+      beat.putNull("coverAssetId");
+    } else {
+      beat.put("coverAssetId", coverFromChild);
+    }
   }
 
   private BeatRefBundle validateAndCollectRefs(String contentJson) {
@@ -298,13 +307,7 @@ public class PageService {
       if (!"BEAT".equals(type)) {
         continue;
       }
-      JsonNode coverNode = item.get("coverAssetId");
-      if (coverNode == null || coverNode.isNull() || !coverNode.isIntegralNumber()) {
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "BEAT coverAssetId is required");
-      }
-      long coverAssetId = coverNode.asLong();
-      validateNormalAsset(coverAssetId);
-      coverIds.add(coverAssetId);
+      Long coverAssetId = integralId(item.get("coverAssetId"));
 
       JsonNode children = item.get("children");
       if (children == null || children.isNull() || !children.isArray()) {
@@ -323,38 +326,49 @@ public class PageService {
         }
         if ("COVER".equals(childType)) {
           coverCount++;
-          JsonNode assetIdNode = child.get("assetId");
-          if (assetIdNode == null || assetIdNode.isNull() || !assetIdNode.isIntegralNumber()) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, "BEAT COVER assetId is required");
+          Long childAssetId = integralId(child.get("assetId"));
+          if (childAssetId == null) {
+            if (coverAssetId != null) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COVER assetId");
+            }
+          } else {
+            if (coverAssetId == null || !childAssetId.equals(coverAssetId)) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COVER assetId");
+            }
+            validateNormalAsset(childAssetId);
+            coverIds.add(childAssetId);
           }
-          long childAssetId = assetIdNode.asLong();
-          if (childAssetId != coverAssetId) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COVER assetId");
-          }
-          validateNormalAsset(childAssetId);
         } else if ("COMBO".equals(childType)) {
           comboCount++;
-          JsonNode comboIdNode = child.get("comboId");
-          if (comboIdNode == null || comboIdNode.isNull() || !comboIdNode.isIntegralNumber()) {
+          Long comboId = integralId(child.get("comboId"));
+          if (comboId == null) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST, "BEAT COMBO comboId is required");
           }
-          long comboId = comboIdNode.asLong();
           ComboDetailResponse combo = comboService.get(comboId);
           if (combo.members() == null || combo.members().isEmpty()) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, "combo has no members: " + comboId);
-          }
-          for (ComboDetailResponse.MemberView member : combo.members()) {
-            validateNormalAsset(member.assetId());
-            comboMemberIds.add(member.assetId());
-          }
-          Long firstFrame = firstFrameAssetId(combo);
-          if (!firstFrame.equals(coverAssetId)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COMBO first frame");
+            if (coverAssetId != null) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId must be null when combo has no members");
+            }
+          } else {
+            if (coverAssetId == null) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId is required");
+            }
+            validateNormalAsset(coverAssetId);
+            coverIds.add(coverAssetId);
+            for (ComboDetailResponse.MemberView member : combo.members()) {
+              validateNormalAsset(member.assetId());
+              comboMemberIds.add(member.assetId());
+            }
+            Long firstFrame = firstFrameAssetId(combo);
+            if (!firstFrame.equals(coverAssetId)) {
+              throw new ResponseStatusException(
+                  HttpStatus.BAD_REQUEST, "BEAT coverAssetId must match COMBO first frame");
+            }
           }
           comboIds.add(comboId);
         }
@@ -409,6 +423,13 @@ public class PageService {
       steps.add(n);
     }
     return steps;
+  }
+
+  private static Long integralId(JsonNode node) {
+    if (node == null || node.isNull() || !node.isIntegralNumber()) {
+      return null;
+    }
+    return node.asLong();
   }
 
   private void validateNormalAsset(Long assetId) {
