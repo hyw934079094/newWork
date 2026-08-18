@@ -12,6 +12,7 @@ import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
 import com.story.admin.domain.AssetUnlinkedOrder;
+import com.story.admin.dto.AssetPageResponse;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.repository.AssetArcRelRepository;
 import com.story.admin.repository.AssetCategoryRepository;
@@ -154,7 +155,8 @@ public class AssetService {
 
   public List<Asset> list(
       Long categoryId, String status, String q, String characterFilter, Long characterId) {
-    return list(categoryId, status, q, characterFilter, characterId, null, null, null);
+    return listPage(categoryId, status, q, characterFilter, characterId, null, null, null, 0, 5000)
+        .items();
   }
 
   public List<Asset> list(
@@ -166,19 +168,52 @@ public class AssetService {
       String linkType,
       Long seriesId,
       Long arcId) {
+    return listPage(
+            categoryId, status, q, characterFilter, characterId, linkType, seriesId, arcId, 0, 5000)
+        .items();
+  }
+
+  public AssetPageResponse listPage(
+      Long categoryId,
+      String status,
+      String q,
+      String characterFilter,
+      Long characterId,
+      String linkType,
+      Long seriesId,
+      Long arcId,
+      int page,
+      int size) {
+    if (page < 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "page must be >= 0");
+    }
+    if (size < 1 || size > 5000) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "size must be between 1 and 5000");
+    }
     AssetStatus parsed = parseStatus(status);
     String query = q == null ? "" : q.trim();
     String filter = normalizeCharacterFilter(characterFilter, characterId);
     String normalizedLinkType = normalizeLinkType(linkType);
-    List<Asset> assets =
-        assetRepository
-            .search(
-                categoryId, parsed, query, filter, characterId, normalizedLinkType, seriesId, arcId)
-            .stream()
-            .map(this::hydrate)
-            .toList();
-    return applyScopeOrder(
-        assets, categoryId, filter, characterId, normalizedLinkType, seriesId, arcId);
+    List<Asset> ordered =
+        applyScopeOrder(
+            assetRepository.search(
+                categoryId, parsed, query, filter, characterId, normalizedLinkType, seriesId, arcId),
+            categoryId,
+            filter,
+            characterId,
+            normalizedLinkType,
+            seriesId,
+            arcId);
+    long total = ordered.size();
+    int from = page * size;
+    List<Asset> slice;
+    if (from >= total) {
+      slice = List.of();
+    } else {
+      int to = (int) Math.min((long) from + size, total);
+      slice = ordered.subList(from, to);
+    }
+    return new AssetPageResponse(hydrateAll(slice), page, size, total);
   }
 
   public Asset get(Long id) {
@@ -786,15 +821,59 @@ public class AssetService {
     if (asset == null || asset.getId() == null) {
       return asset;
     }
-    asset.setTagNames(tagRelRepository.findTagNamesByAssetId(asset.getId()));
-    List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(asset.getId());
-    List<Long> seriesIds = assetSeriesRelRepository.findSeriesIdsByAssetId(asset.getId());
-    List<Long> arcIds = assetArcRelRepository.findArcIdsByAssetId(asset.getId());
-    asset.setCharacterIds(characterIds);
-    asset.setSeriesIds(seriesIds);
-    asset.setArcIds(arcIds);
-    asset.setLinkType(deriveLinkType(characterIds, seriesIds, arcIds));
-    return asset;
+    return hydrateAll(List.of(asset)).get(0);
+  }
+
+  private List<Asset> hydrateAll(List<Asset> assets) {
+    if (assets == null || assets.isEmpty()) {
+      return assets == null ? List.of() : assets;
+    }
+    List<Long> ids =
+        assets.stream().map(Asset::getId).filter(Objects::nonNull).distinct().toList();
+    if (ids.isEmpty()) {
+      return assets;
+    }
+
+    Map<Long, List<String>> tagsByAsset = new HashMap<>();
+    for (Object[] row : tagRelRepository.findTagNamesByAssetIdIn(ids)) {
+      Long assetId = (Long) row[0];
+      String name = (String) row[1];
+      tagsByAsset.computeIfAbsent(assetId, k -> new ArrayList<>()).add(name);
+    }
+
+    Map<Long, List<Long>> charactersByAsset = new HashMap<>();
+    for (Object[] row : characterRelRepository.findCharacterIdsByAssetIdIn(ids)) {
+      Long assetId = (Long) row[0];
+      Long characterId = (Long) row[1];
+      charactersByAsset.computeIfAbsent(assetId, k -> new ArrayList<>()).add(characterId);
+    }
+
+    Map<Long, List<Long>> seriesByAsset = new HashMap<>();
+    for (Object[] row : assetSeriesRelRepository.findSeriesIdsByAssetIdIn(ids)) {
+      Long assetId = (Long) row[0];
+      Long seriesId = (Long) row[1];
+      seriesByAsset.computeIfAbsent(assetId, k -> new ArrayList<>()).add(seriesId);
+    }
+
+    Map<Long, List<Long>> arcsByAsset = new HashMap<>();
+    for (Object[] row : assetArcRelRepository.findArcIdsByAssetIdIn(ids)) {
+      Long assetId = (Long) row[0];
+      Long arcId = (Long) row[1];
+      arcsByAsset.computeIfAbsent(assetId, k -> new ArrayList<>()).add(arcId);
+    }
+
+    for (Asset asset : assets) {
+      Long id = asset.getId();
+      List<Long> characterIds = charactersByAsset.getOrDefault(id, List.of());
+      List<Long> seriesIds = seriesByAsset.getOrDefault(id, List.of());
+      List<Long> arcIds = arcsByAsset.getOrDefault(id, List.of());
+      asset.setTagNames(tagsByAsset.getOrDefault(id, List.of()));
+      asset.setCharacterIds(characterIds);
+      asset.setSeriesIds(seriesIds);
+      asset.setArcIds(arcIds);
+      asset.setLinkType(deriveLinkType(characterIds, seriesIds, arcIds));
+    }
+    return assets;
   }
 
   private void resequence(List<Asset> assets) {

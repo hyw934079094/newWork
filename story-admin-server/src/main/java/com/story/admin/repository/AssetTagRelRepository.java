@@ -2,6 +2,7 @@ package com.story.admin.repository;
 
 import com.story.admin.domain.AssetTagRel;
 import com.story.admin.domain.AssetTagRelId;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -21,4 +22,13 @@ public interface AssetTagRelRepository extends JpaRepository<AssetTagRel, AssetT
       order by t.name
       """)
   List<String> findTagNamesByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select r.assetId, t.name from AssetTagRel r
+      join AssetTag t on t.id = r.tagId
+      where r.assetId in :assetIds
+      order by r.assetId, t.name
+      """)
+  List<Object[]> findTagNamesByAssetIdIn(@Param("assetIds") Collection<Long> assetIds);
 }

@@ -4,6 +4,7 @@ import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetLinkType;
 import com.story.admin.dto.AssetBatchLinkRequest;
 import com.story.admin.dto.AssetMoveRequest;
+import com.story.admin.dto.AssetPageResponse;
 import com.story.admin.dto.AssetReorderByScopeRequest;
 import com.story.admin.dto.AssetReorderRequest;
 import com.story.admin.dto.AssetUpdateRequest;
@@ -79,7 +80,7 @@ public class AssetController {
   }
 
   @GetMapping
-  public List<Asset> list(
+  public AssetPageResponse list(
       @RequestParam(required = false) Long categoryId,
       @RequestParam(required = false, defaultValue = "NORMAL") String status,
       @RequestParam(required = false) String q,
@@ -87,9 +88,11 @@ public class AssetController {
       @RequestParam(required = false) Long characterId,
       @RequestParam(required = false) String linkType,
       @RequestParam(required = false) Long seriesId,
-      @RequestParam(required = false) Long arcId) {
-    return assetService.list(
-        categoryId, status, q, characterFilter, characterId, linkType, seriesId, arcId);
+      @RequestParam(required = false) Long arcId,
+      @RequestParam(required = false, defaultValue = "0") int page,
+      @RequestParam(required = false, defaultValue = "48") int size) {
+    return assetService.listPage(
+        categoryId, status, q, characterFilter, characterId, linkType, seriesId, arcId, page, size);
   }
 
   @GetMapping("/{id}")

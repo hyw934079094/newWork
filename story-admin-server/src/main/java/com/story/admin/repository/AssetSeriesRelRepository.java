@@ -2,6 +2,7 @@ package com.story.admin.repository;
 
 import com.story.admin.domain.AssetSeriesRel;
 import com.story.admin.domain.AssetSeriesRelId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,14 @@ public interface AssetSeriesRelRepository extends JpaRepository<AssetSeriesRel, 
 
   @Query("select r.seriesId from AssetSeriesRel r where r.assetId = :assetId order by r.seriesId")
   List<Long> findSeriesIdsByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select r.assetId, r.seriesId from AssetSeriesRel r
+      where r.assetId in :assetIds
+      order by r.assetId, r.seriesId
+      """)
+  List<Object[]> findSeriesIdsByAssetIdIn(@Param("assetIds") Collection<Long> assetIds);
 
   boolean existsByAssetId(Long assetId);
 

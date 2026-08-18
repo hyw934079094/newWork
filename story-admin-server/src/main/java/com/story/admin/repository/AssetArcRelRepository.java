@@ -2,6 +2,7 @@ package com.story.admin.repository;
 
 import com.story.admin.domain.AssetArcRel;
 import com.story.admin.domain.AssetArcRelId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,14 @@ public interface AssetArcRelRepository extends JpaRepository<AssetArcRel, AssetA
 
   @Query("select r.arcId from AssetArcRel r where r.assetId = :assetId order by r.arcId")
   List<Long> findArcIdsByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select r.assetId, r.arcId from AssetArcRel r
+      where r.assetId in :assetIds
+      order by r.assetId, r.arcId
+      """)
+  List<Object[]> findArcIdsByAssetIdIn(@Param("assetIds") Collection<Long> assetIds);
 
   boolean existsByAssetId(Long assetId);
 

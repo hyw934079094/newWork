@@ -2,6 +2,7 @@ package com.story.admin.repository;
 
 import com.story.admin.domain.AssetCharacterRel;
 import com.story.admin.domain.AssetCharacterRelId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -26,6 +27,14 @@ public interface AssetCharacterRelRepository
       order by r.characterId
       """)
   List<Long> findCharacterIdsByAssetId(@Param("assetId") Long assetId);
+
+  @Query(
+      """
+      select r.assetId, r.characterId from AssetCharacterRel r
+      where r.assetId in :assetIds
+      order by r.assetId, r.characterId
+      """)
+  List<Object[]> findCharacterIdsByAssetIdIn(@Param("assetIds") Collection<Long> assetIds);
 
   @Query(
       """
