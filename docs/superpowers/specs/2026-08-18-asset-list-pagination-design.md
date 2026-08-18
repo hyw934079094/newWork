@@ -1,6 +1,6 @@
 # 设计：素材列表分页 + 批量 hydrate
 
-> 状态：已确认待实现  
+> 状态：已实现  
 > 日期：2026-08-18  
 > 范围：`story-admin-server` `GET /api/assets`；`story-admin-web` 所有 `listAssets` 调用方  
 > 相关：`2026-08-13-asset-module-design.md`、`2026-08-15-asset-scope-sort-design.md`
