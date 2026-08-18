@@ -75,7 +75,7 @@ Flyway：`V12__asset_association_snapshot.sql`。
 | `ARC_COVER` | `{"arcId":1}` |
 | `COMBO_MEMBER` | `{"comboId":7,"memberNo":2,"playSequenceBefore":"1,2,3"}`（`playSequenceBefore` 为拆除前整串，恢复时写回该串并插入成员） |
 | `PAGE_BEAT_COVER` | `{"pageId":9,"beatIndex":0,"childIndex":1}`（索引为 content 数组中目标 BEAT / COVER 子节点下标；回收前校验仍指向本 `assetId`） |
-| `PAGE_COMBO_MEMBER_REF` | `{"pageId":9,"refKind":"BEAT_COMBO_MEMBER","coverAssetIdBefore":101}`（`coverAssetIdBefore` 可选，仅当回收时改写了页 `coverAssetId`） |
+| `PAGE_COMBO_MEMBER_REF` | `{"pageId":9,"comboId":7,"refKind":"BEAT_COMBO_MEMBER","coverAssetIdBefore":101}`（`comboId` 供恢复定位页内 COMBO；`coverAssetIdBefore` 可选，仅当回收时改写了页 `coverAssetId`） |
 
 ## 5. 算法
 
