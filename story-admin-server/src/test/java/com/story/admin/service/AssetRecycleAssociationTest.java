@@ -415,6 +415,75 @@ class AssetRecycleAssociationTest {
         .containsExactly("BEAT_COVER");
   }
 
+  @Test
+  void recycleSamePageCoverAndComboFirstFrameClearsBothAndRestoreReattaches() {
+    Long assetId = persistAsset("shared-cover-combo").getId();
+    Long extra = persistAsset("combo-other-frame").getId();
+    var combo =
+        comboService.create(
+            new ComboUpsertRequest(
+                "shared-first-frame",
+                "1,2",
+                new BigDecimal("1.0"),
+                true,
+                null,
+                List.of(new ComboMemberRequest(assetId, 1), new ComboMemberRequest(extra, 2)),
+                List.of()));
+    Long arcId = persistArc();
+    StoryPage page = pageService.create(arcId, new PageCreateRequest("shared-page"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":"
+            + assetId
+            + ",\"children\":[{\"type\":\"COVER\",\"assetId\":"
+            + assetId
+            + "}]},"
+            + "{\"type\":\"BEAT\",\"children\":[{\"type\":\"COMBO\",\"comboId\":"
+            + combo.id()
+            + "}]}]";
+    pageService.update(page.getId(), new PageUpdateRequest("shared-page", json));
+    assertThat(pageAssetRefRepository.findByAssetId(assetId))
+        .extracting(PageAssetRef::getRefKind)
+        .contains("BEAT_COVER", "BEAT_COMBO_MEMBER");
+
+    Asset recycled = assetService.recycle(assetId);
+
+    assertThat(recycled.getStatus()).isEqualTo(DELETED);
+    StoryPage afterRecycle = storyPageRepository.findById(page.getId()).orElseThrow();
+    assertThat(afterRecycle.getContentJson()).contains("\"type\":\"COVER\"");
+    assertThat(afterRecycle.getContentJson()).doesNotContain("\"assetId\":" + assetId);
+    assertThat(afterRecycle.getContentJson()).doesNotContain("\"coverAssetId\":" + assetId);
+    assertThat(afterRecycle.getContentJson()).contains("\"comboId\":" + combo.id());
+    assertThat(comboMemberRepository.findByComboIdOrderBySortOrderAscMemberNoAsc(combo.id()))
+        .extracting(AssetComboMember::getAssetId)
+        .containsExactly(extra);
+    assertThat(pageAssetRefRepository.findByAssetId(assetId)).isEmpty();
+    List<AssetAssociationSnapshot> snaps = snapshotRepository.findByAssetIdOrderByIdAsc(assetId);
+    assertThat(snaps)
+        .extracting(AssetAssociationSnapshot::getKind)
+        .contains("COMBO_MEMBER", "PAGE_BEAT_COVER", "PAGE_COMBO_MEMBER_REF");
+    assertThat(snaps)
+        .filteredOn(s -> "PAGE_BEAT_COVER".equals(s.getKind()))
+        .extracting(AssetAssociationSnapshot::getPayloadJson)
+        .anyMatch(
+            payload ->
+                payload.contains("\"pageId\":" + page.getId())
+                    && payload.contains("\"beatIndex\":0"));
+
+    Asset restored = assetService.restore(assetId);
+
+    assertThat(restored.getStatus()).isEqualTo(NORMAL);
+    StoryPage afterRestore = storyPageRepository.findById(page.getId()).orElseThrow();
+    assertThat(afterRestore.getContentJson()).contains("\"type\":\"COVER\"");
+    assertThat(afterRestore.getContentJson()).contains("\"assetId\":" + assetId);
+    assertThat(afterRestore.getContentJson()).contains("\"coverAssetId\":" + assetId);
+    assertThat(comboMemberRepository.findByComboIdOrderBySortOrderAscMemberNoAsc(combo.id()))
+        .extracting(AssetComboMember::getAssetId)
+        .containsExactly(assetId, extra);
+    assertThat(pageAssetRefRepository.findByAssetId(assetId))
+        .extracting(PageAssetRef::getRefKind)
+        .contains("BEAT_COVER", "BEAT_COMBO_MEMBER");
+  }
+
   private Long persistArc() {
     Long seriesId =
         seriesService.create(new SeriesCreateRequest("回收页系列", null, null, null, null)).getId();

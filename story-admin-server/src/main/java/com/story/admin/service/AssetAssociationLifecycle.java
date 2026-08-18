@@ -310,8 +310,8 @@ public class AssetAssociationLifecycle {
 
   private void detachComboAndPages(Long assetId, List<AssetAssociationSnapshot> snaps) {
     Set<Long> affectedComboIds = detachComboMembers(assetId, snaps);
-    detachPageComboMemberRefs(assetId, affectedComboIds, snaps);
     detachPageBeatCovers(assetId, snaps);
+    detachPageComboMemberRefs(assetId, affectedComboIds, snaps);
   }
 
   private Set<Long> detachComboMembers(Long assetId, List<AssetAssociationSnapshot> snaps) {
@@ -374,16 +374,21 @@ public class AssetAssociationLifecycle {
     boolean coverChanged = false;
     if (page != null && comboId != null) {
       JsonNode root = readPageContent(page);
+      boolean foundCoverChild = clearCoverChildrenHoldingAsset(root, page.getId(), assetId, snaps);
       coverAssetIdBefore = coverAssetIdForCombo(root, comboId);
       if (assetId.equals(coverAssetIdBefore)) {
         Long newCover = firstFrameAssetId(comboId);
         patchComboCoverAssetId(root, comboId, newCover);
-        savePageContent(page, root);
         coverChanged = true;
-        deletePageAssetRef(pageId, assetId, REF_KIND_BEAT_COVER);
+        if (!pageHasCoverChildHoldingAsset(root, assetId)) {
+          deletePageAssetRef(pageId, assetId, REF_KIND_BEAT_COVER);
+        }
         if (newCover != null) {
           savePageAssetRefIfAbsent(pageId, newCover, REF_KIND_BEAT_COVER);
         }
+      }
+      if (foundCoverChild || coverChanged) {
+        savePageContent(page, root);
       }
     }
     Map<String, Object> payload = new LinkedHashMap<>();
@@ -400,51 +405,85 @@ public class AssetAssociationLifecycle {
   }
 
   private void detachPageBeatCovers(Long assetId, List<AssetAssociationSnapshot> snaps) {
+    LinkedHashSet<Long> pageIds = new LinkedHashSet<>();
     for (PageAssetRef ref : List.copyOf(pageAssetRefRepository.findByAssetId(assetId))) {
-      if (!REF_KIND_BEAT_COVER.equals(ref.getRefKind())) {
-        continue;
-      }
-      StoryPage page = storyPageRepository.findById(ref.getPageId()).orElse(null);
+      pageIds.add(ref.getPageId());
+    }
+    for (Long pageId : pageIds) {
+      StoryPage page = storyPageRepository.findById(pageId).orElse(null);
       if (page == null) {
-        deletePageAssetRef(ref.getPageId(), assetId, REF_KIND_BEAT_COVER);
+        deletePageAssetRef(pageId, assetId, REF_KIND_BEAT_COVER);
         continue;
       }
       JsonNode root = readPageContent(page);
-      boolean foundCover = false;
-      if (root != null && root.isArray()) {
-        for (int beatIndex = 0; beatIndex < root.size(); beatIndex++) {
-          JsonNode item = root.get(beatIndex);
-          if (item == null || !item.isObject() || !"BEAT".equals(item.path("type").asText(null))) {
-            continue;
-          }
-          JsonNode children = item.get("children");
-          if (children == null || !children.isArray()) {
-            continue;
-          }
-          for (int childIndex = 0; childIndex < children.size(); childIndex++) {
-            JsonNode child = children.get(childIndex);
-            if (child == null || !child.isObject() || !"COVER".equals(child.path("type").asText(null))) {
-              continue;
-            }
-            if (!assetId.equals(jsonLong(child.get("assetId")))) {
-              continue;
-            }
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("pageId", page.getId());
-            payload.put("beatIndex", beatIndex);
-            payload.put("childIndex", childIndex);
-            snaps.add(snapshot(assetId, PAGE_BEAT_COVER, payload));
-            ((ObjectNode) child).putNull("assetId");
-            ((ObjectNode) item).putNull("coverAssetId");
-            foundCover = true;
-          }
-        }
-      }
+      boolean foundCover = clearCoverChildrenHoldingAsset(root, page.getId(), assetId, snaps);
       if (foundCover) {
         savePageContent(page, root);
       }
-      deletePageAssetRef(page.getId(), assetId, REF_KIND_BEAT_COVER);
+      if (!pageHasCoverChildHoldingAsset(root, assetId)) {
+        deletePageAssetRef(page.getId(), assetId, REF_KIND_BEAT_COVER);
+      }
     }
+  }
+
+  private boolean clearCoverChildrenHoldingAsset(
+      JsonNode root, Long pageId, Long assetId, List<AssetAssociationSnapshot> snaps) {
+    boolean foundCover = false;
+    if (root == null || !root.isArray()) {
+      return false;
+    }
+    for (int beatIndex = 0; beatIndex < root.size(); beatIndex++) {
+      JsonNode item = root.get(beatIndex);
+      if (item == null || !item.isObject() || !"BEAT".equals(item.path("type").asText(null))) {
+        continue;
+      }
+      JsonNode children = item.get("children");
+      if (children == null || !children.isArray()) {
+        continue;
+      }
+      for (int childIndex = 0; childIndex < children.size(); childIndex++) {
+        JsonNode child = children.get(childIndex);
+        if (child == null || !child.isObject() || !"COVER".equals(child.path("type").asText(null))) {
+          continue;
+        }
+        if (!assetId.equals(jsonLong(child.get("assetId")))) {
+          continue;
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("pageId", pageId);
+        payload.put("beatIndex", beatIndex);
+        payload.put("childIndex", childIndex);
+        snaps.add(snapshot(assetId, PAGE_BEAT_COVER, payload));
+        ((ObjectNode) child).putNull("assetId");
+        ((ObjectNode) item).putNull("coverAssetId");
+        foundCover = true;
+      }
+    }
+    return foundCover;
+  }
+
+  private static boolean pageHasCoverChildHoldingAsset(JsonNode root, Long assetId) {
+    if (root == null || !root.isArray() || assetId == null) {
+      return false;
+    }
+    for (JsonNode item : root) {
+      if (item == null || !item.isObject() || !"BEAT".equals(item.path("type").asText(null))) {
+        continue;
+      }
+      JsonNode children = item.get("children");
+      if (children == null || !children.isArray()) {
+        continue;
+      }
+      for (JsonNode child : children) {
+        if (child != null
+            && child.isObject()
+            && "COVER".equals(child.path("type").asText(null))
+            && assetId.equals(jsonLong(child.get("assetId")))) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private void restoreComboAndPages(Long assetId, List<AssetAssociationSnapshot> snaps) {

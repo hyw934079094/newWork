@@ -557,7 +557,10 @@ async function save() {
     return true;
   });
   if (missingVisual) {
-    ElMessage.warning('画面组必须选择封面素材或组合');
+    const visual = findVisual(missingVisual);
+    ElMessage.warning(
+      visual?.type === 'COMBO' ? '请选择组合' : '画面组缺少封面或组合节点',
+    );
     return;
   }
   saving.value = true;
