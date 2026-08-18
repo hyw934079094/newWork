@@ -76,6 +76,7 @@ public class AssetService {
   private final AssetSeriesRelRepository assetSeriesRelRepository;
   private final AssetArcRelRepository assetArcRelRepository;
   private final AssetUnlinkedOrderRepository unlinkedOrderRepository;
+  private final AssetAssociationLifecycle associationLifecycle;
 
   public AssetService(
       AssetRepository assetRepository,
@@ -94,7 +95,8 @@ public class AssetService {
       StoryPageRepository storyPageRepository,
       AssetSeriesRelRepository assetSeriesRelRepository,
       AssetArcRelRepository assetArcRelRepository,
-      AssetUnlinkedOrderRepository unlinkedOrderRepository) {
+      AssetUnlinkedOrderRepository unlinkedOrderRepository,
+      AssetAssociationLifecycle associationLifecycle) {
     this.assetRepository = assetRepository;
     this.categoryRepository = categoryRepository;
     this.storageService = storageService;
@@ -112,6 +114,7 @@ public class AssetService {
     this.assetSeriesRelRepository = assetSeriesRelRepository;
     this.assetArcRelRepository = assetArcRelRepository;
     this.unlinkedOrderRepository = unlinkedOrderRepository;
+    this.associationLifecycle = associationLifecycle;
   }
 
   @Transactional
@@ -294,6 +297,7 @@ public class AssetService {
   @Transactional
   public Asset recycle(Long id) {
     Asset asset = getRaw(id);
+    associationLifecycle.detachAll(id);
     asset.setStatus(AssetStatus.DELETED);
     asset.setDeletedAt(LocalDateTime.now());
     return hydrate(assetRepository.save(asset));
@@ -304,7 +308,9 @@ public class AssetService {
     Asset asset = getRaw(id);
     asset.setStatus(AssetStatus.NORMAL);
     asset.setDeletedAt(null);
-    return hydrate(assetRepository.save(asset));
+    asset = assetRepository.save(asset);
+    associationLifecycle.restoreAll(id);
+    return hydrate(asset);
   }
 
   @Transactional
