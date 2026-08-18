@@ -763,7 +763,9 @@ public class AssetAssociationLifecycle {
     }
   }
 
-  private void purgeComboAndPages(Long assetId) {}
+  private void purgeComboAndPages(Long assetId) {
+    detachComboAndPages(assetId, new ArrayList<>());
+  }
 
   private AssetAssociationSnapshot snapshot(Long assetId, String kind, Map<String, ?> payload) {
     AssetAssociationSnapshot snap = new AssetAssociationSnapshot();

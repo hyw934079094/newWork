@@ -12,9 +12,9 @@ import com.story.admin.domain.StorySeries;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.AssetSeriesRelRepository;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
@@ -51,6 +51,7 @@ class AssetLinkServiceTest {
   @Autowired ConfigService configService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
+  @Autowired AssetSeriesRelRepository assetSeriesRelRepository;
 
   @Test
   void updateToSeriesClearsCharacters() {
@@ -81,7 +82,7 @@ class AssetLinkServiceTest {
   }
 
   @Test
-  void hardDeleteBlockedWhenSeriesLinked() {
+  void hardDeleteCascadesWhenSeriesLinked() {
     Asset asset = persistAsset("series-linked");
     StorySeries series =
         seriesService.create(new SeriesCreateRequest("暗夜关联", null, null, null, null));
@@ -92,11 +93,10 @@ class AssetLinkServiceTest {
             .seriesIds(List.of(series.getId()))
             .build());
 
-    assertThatThrownBy(() -> assetService.hardDelete(asset.getId()))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("暗夜关联");
+    assetService.hardDelete(asset.getId());
 
-    assertThat(assetRepository.findById(asset.getId())).isPresent();
+    assertThat(assetRepository.findById(asset.getId())).isEmpty();
+    assertThat(assetSeriesRelRepository.findSeriesIdsByAssetId(asset.getId())).isEmpty();
   }
 
   @Test

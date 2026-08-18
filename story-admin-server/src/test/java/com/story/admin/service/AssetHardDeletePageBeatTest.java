@@ -2,7 +2,6 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
@@ -12,9 +11,10 @@ import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.PageCreateRequest;
 import com.story.admin.dto.PageUpdateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.PageAssetRefRepository;
+import com.story.admin.repository.StoryPageRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,9 +44,11 @@ class AssetHardDeletePageBeatTest {
   @Autowired ArcService arcService;
   @Autowired SeriesService seriesService;
   @Autowired PageService pageService;
+  @Autowired StoryPageRepository storyPageRepository;
+  @Autowired PageAssetRefRepository pageAssetRefRepository;
 
   @Test
-  void hardDeleteBlockedWhenAssetIsBeatCover() {
+  void hardDeleteCascadesWhenAssetIsBeatCover() {
     Long assetId = persistAsset("beat-cover").getId();
     Long seriesId =
         seriesService.create(new SeriesCreateRequest("测试系列", null, null, null, null)).getId();
@@ -58,11 +60,14 @@ class AssetHardDeletePageBeatTest {
             + ",\"children\":[{\"type\":\"BODY\",\"text\":\"hi\"}]}]";
     pageService.update(page.getId(), new PageUpdateRequest("第一页", json));
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("第一页");
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(pageAssetRefRepository.findByAssetId(assetId)).isEmpty();
+    StoryPage afterDelete = storyPageRepository.findById(page.getId()).orElseThrow();
+    assertThat(afterDelete.getContentJson()).contains("\"type\":\"COVER\"");
+    assertThat(afterDelete.getContentJson()).doesNotContain("\"assetId\":" + assetId);
+    assertThat(afterDelete.getContentJson()).contains("\"coverAssetId\":null");
   }
 
   private Asset persistAsset(String name) {

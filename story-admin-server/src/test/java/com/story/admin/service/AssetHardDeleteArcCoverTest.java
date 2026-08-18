@@ -2,16 +2,15 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
+import com.story.admin.repository.StoryArcRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,20 +39,19 @@ class AssetHardDeleteArcCoverTest {
   @Autowired AssetCategoryRepository categoryRepository;
   @Autowired ArcService arcService;
   @Autowired SeriesService seriesService;
+  @Autowired StoryArcRepository storyArcRepository;
 
   @Test
-  void hardDeleteBlockedWhenAssetIsArcCover() {
+  void hardDeleteCascadesWhenAssetIsArcCover() {
     Long assetId = persistAsset("arc-cover").getId();
     Long seriesId =
         seriesService.create(new SeriesCreateRequest("测试系列", null, null, null, null)).getId();
     StoryArc arc = arcService.create(seriesId, new ArcCreateRequest("暗夜开篇", null, null, assetId));
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("暗夜开篇")
-        .hasMessageContaining(arc.getCode());
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(storyArcRepository.findById(arc.getId()).orElseThrow().getCoverAssetId()).isNull();
   }
 
   private Asset persistAsset(String name) {

@@ -1,6 +1,5 @@
 package com.story.admin.service;
 
-import com.story.admin.domain.AiReferenceItem;
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetArcRel;
 import com.story.admin.domain.AssetArcRelId;
@@ -13,27 +12,17 @@ import com.story.admin.domain.AssetStatus;
 import com.story.admin.domain.AssetTag;
 import com.story.admin.domain.AssetTagRel;
 import com.story.admin.domain.AssetUnlinkedOrder;
-import com.story.admin.domain.CharacterProfile;
-import com.story.admin.domain.StoryArc;
-import com.story.admin.domain.StoryPage;
-import com.story.admin.domain.StorySeries;
 import com.story.admin.dto.AssetUpdateRequest;
-import com.story.admin.exception.ConflictException;
-import com.story.admin.repository.AiReferenceItemRepository;
 import com.story.admin.repository.AssetArcRelRepository;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
-import com.story.admin.repository.AssetComboMemberRepository;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.AssetSeriesRelRepository;
 import com.story.admin.repository.AssetTagRelRepository;
 import com.story.admin.repository.AssetTagRepository;
 import com.story.admin.repository.AssetUnlinkedOrderRepository;
 import com.story.admin.repository.CharacterProfileRepository;
-import com.story.admin.repository.IdentityAssetRelRepository;
-import com.story.admin.repository.PageAssetRefRepository;
 import com.story.admin.repository.StoryArcRepository;
-import com.story.admin.repository.StoryPageRepository;
 import com.story.admin.repository.StorySeriesRepository;
 import com.story.admin.service.StorageService.StoredFile;
 import java.nio.file.Path;
@@ -66,13 +55,8 @@ public class AssetService {
   private final AssetTagRelRepository tagRelRepository;
   private final AssetCharacterRelRepository characterRelRepository;
   private final CharacterProfileRepository characterProfileRepository;
-  private final AiReferenceItemRepository aiReferenceItemRepository;
-  private final AssetComboMemberRepository comboMemberRepository;
-  private final IdentityAssetRelRepository identityAssetRelRepository;
   private final StorySeriesRepository storySeriesRepository;
   private final StoryArcRepository storyArcRepository;
-  private final PageAssetRefRepository pageAssetRefRepository;
-  private final StoryPageRepository storyPageRepository;
   private final AssetSeriesRelRepository assetSeriesRelRepository;
   private final AssetArcRelRepository assetArcRelRepository;
   private final AssetUnlinkedOrderRepository unlinkedOrderRepository;
@@ -86,13 +70,8 @@ public class AssetService {
       AssetTagRelRepository tagRelRepository,
       AssetCharacterRelRepository characterRelRepository,
       CharacterProfileRepository characterProfileRepository,
-      AiReferenceItemRepository aiReferenceItemRepository,
-      AssetComboMemberRepository comboMemberRepository,
-      IdentityAssetRelRepository identityAssetRelRepository,
       StorySeriesRepository storySeriesRepository,
       StoryArcRepository storyArcRepository,
-      PageAssetRefRepository pageAssetRefRepository,
-      StoryPageRepository storyPageRepository,
       AssetSeriesRelRepository assetSeriesRelRepository,
       AssetArcRelRepository assetArcRelRepository,
       AssetUnlinkedOrderRepository unlinkedOrderRepository,
@@ -104,13 +83,8 @@ public class AssetService {
     this.tagRelRepository = tagRelRepository;
     this.characterRelRepository = characterRelRepository;
     this.characterProfileRepository = characterProfileRepository;
-    this.aiReferenceItemRepository = aiReferenceItemRepository;
-    this.comboMemberRepository = comboMemberRepository;
-    this.identityAssetRelRepository = identityAssetRelRepository;
     this.storySeriesRepository = storySeriesRepository;
     this.storyArcRepository = storyArcRepository;
-    this.pageAssetRefRepository = pageAssetRefRepository;
-    this.storyPageRepository = storyPageRepository;
     this.assetSeriesRelRepository = assetSeriesRelRepository;
     this.assetArcRelRepository = assetArcRelRepository;
     this.unlinkedOrderRepository = unlinkedOrderRepository;
@@ -321,42 +295,8 @@ public class AssetService {
   @Transactional
   public void hardDelete(Long id) {
     Asset asset = getRaw(id);
-    List<Long> characterIds = characterRelRepository.findCharacterIdsByAssetId(id);
-    List<String> seriesLinkNames = assetSeriesRelRepository.findSeriesNamesByAssetId(id);
-    List<String> arcLinkTitles = assetArcRelRepository.findArcTitlesByAssetId(id);
-    List<AiReferenceItem> aiRefs = aiReferenceItemRepository.findByAssetId(id);
-    List<String> comboNames = comboMemberRepository.findComboNamesByAssetId(id);
-    List<String> identityNames = identityAssetRelRepository.findIdentityNamesByAssetId(id);
-    List<StorySeries> seriesCovers = storySeriesRepository.findByCoverAssetId(id);
-    List<StoryArc> arcCovers = storyArcRepository.findByCoverAssetId(id);
-    List<Long> pageIds = pageAssetRefRepository.findPageIdsByAssetId(id);
-    List<StoryPage> pageRefs =
-        pageIds.isEmpty() ? List.of() : storyPageRepository.findAllById(pageIds);
-    if (!characterIds.isEmpty()
-        || !seriesLinkNames.isEmpty()
-        || !arcLinkTitles.isEmpty()
-        || !aiRefs.isEmpty()
-        || !comboNames.isEmpty()
-        || !identityNames.isEmpty()
-        || !seriesCovers.isEmpty()
-        || !arcCovers.isEmpty()
-        || !pageIds.isEmpty()) {
-      throw new ConflictException(
-          buildReferenceSummary(
-              characterIds,
-              seriesLinkNames,
-              arcLinkTitles,
-              aiRefs,
-              comboNames,
-              identityNames,
-              seriesCovers,
-              arcCovers,
-              pageRefs));
-    }
+    associationLifecycle.purgeAll(id);
     tagRelRepository.deleteByAssetId(id);
-    characterRelRepository.deleteByAssetId(id);
-    assetSeriesRelRepository.deleteByAssetId(id);
-    assetArcRelRepository.deleteByAssetId(id);
     unlinkedOrderRepository.deleteByAssetId(id);
     String storagePath = asset.getStoragePath();
     assetRepository.delete(asset);
@@ -969,83 +909,6 @@ public class AssetService {
     String replaced = originalFilename.replace("\\", "/");
     int slash = replaced.lastIndexOf('/');
     return slash >= 0 ? replaced.substring(slash + 1) : replaced;
-  }
-
-  private String buildReferenceSummary(
-      List<Long> characterIds,
-      List<String> seriesLinkNames,
-      List<String> arcLinkTitles,
-      List<AiReferenceItem> aiRefs,
-      List<String> comboNames,
-      List<String> identityNames,
-      List<StorySeries> seriesCovers,
-      List<StoryArc> arcCovers,
-      List<StoryPage> pageRefs) {
-    StringBuilder sb = new StringBuilder("无法彻底删除：仍存在引用。");
-    if (!characterIds.isEmpty()) {
-      Map<Long, CharacterProfile> byId =
-          characterProfileRepository.findAllById(characterIds).stream()
-              .collect(Collectors.toMap(CharacterProfile::getId, Function.identity()));
-      String names =
-          characterIds.stream()
-              .map(
-                  cid -> {
-                    CharacterProfile profile = byId.get(cid);
-                    String name = profile == null ? "?" : profile.getName();
-                    return name + "(id=" + cid + ")";
-                  })
-              .collect(Collectors.joining(", "));
-      sb.append(" 人物关联: [").append(names).append("].");
-    }
-    if (!seriesLinkNames.isEmpty()) {
-      sb.append(" 系列关联: [").append(String.join(", ", seriesLinkNames)).append("].");
-    }
-    if (!arcLinkTitles.isEmpty()) {
-      sb.append(" 篇章关联: [").append(String.join(", ", arcLinkTitles)).append("].");
-    }
-    if (!aiRefs.isEmpty()) {
-      String items =
-          aiRefs.stream()
-              .map(
-                  item ->
-                      "item#"
-                          + item.getId()
-                          + "/session="
-                          + item.getSessionId()
-                          + (item.getPurpose() == null || item.getPurpose().isBlank()
-                              ? ""
-                              : "/purpose=" + item.getPurpose()))
-              .collect(Collectors.joining(", "));
-      sb.append(" AI参考项(").append(aiRefs.size()).append("): [").append(items).append("].");
-    }
-    if (!comboNames.isEmpty()) {
-      sb.append(" 组合引用: [").append(String.join(", ", comboNames)).append("].");
-    }
-    if (!identityNames.isEmpty()) {
-      sb.append(" 本体引用: [").append(String.join(", ", identityNames)).append("].");
-    }
-    if (!seriesCovers.isEmpty()) {
-      String items =
-          seriesCovers.stream()
-              .map(s -> s.getName() + "(" + s.getCode() + ")")
-              .collect(Collectors.joining(", "));
-      sb.append(" 系列封面: [").append(items).append("].");
-    }
-    if (!arcCovers.isEmpty()) {
-      String items =
-          arcCovers.stream()
-              .map(a -> a.getTitle() + "(" + a.getCode() + ")")
-              .collect(Collectors.joining(", "));
-      sb.append(" 篇章封面: [").append(items).append("].");
-    }
-    if (!pageRefs.isEmpty()) {
-      String items =
-          pageRefs.stream()
-              .map(p -> p.getTitle() + "(id=" + p.getId() + ")")
-              .collect(Collectors.joining(", "));
-      sb.append(" 页面画面组: [").append(items).append("].");
-    }
-    return sb.toString();
   }
 
   private static String blankToNull(String value) {

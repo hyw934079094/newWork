@@ -2,15 +2,14 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
+import com.story.admin.repository.AssetCharacterRelRepository;
 import com.story.admin.repository.AssetRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -40,9 +39,10 @@ class AssetDeleteTest {
   @Autowired CharacterService characterService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
+  @Autowired AssetCharacterRelRepository characterRelRepository;
 
   @Test
-  void hardDeleteBlockedWhenLinkedToCharacter() {
+  void hardDeleteCascadesWhenLinkedToCharacter() {
     Long assetId = persistAsset("linked-hard-delete").getId();
     CharacterProfile character =
         characterService.create(
@@ -50,10 +50,10 @@ class AssetDeleteTest {
     assetService.update(
         assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class);
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(characterRelRepository.findCharacterIdsByAssetId(assetId)).isEmpty();
   }
 
   private Asset persistAsset(String name) {

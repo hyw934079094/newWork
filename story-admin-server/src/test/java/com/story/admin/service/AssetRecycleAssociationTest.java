@@ -350,6 +350,27 @@ class AssetRecycleAssociationTest {
   }
 
   @Test
+  void recycleThenHardDeleteClearsSnapshots() {
+    Long assetId = persistAsset("hard-delete-snaps").getId();
+    CharacterProfile character =
+        characterService.create(
+            new CharacterCreateRequest(
+                "硬删快照角色", null, null, null, null, null, null, null, null, null, null, null));
+    assetService.update(
+        assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
+
+    assetService.recycle(assetId);
+    assertThat(snapshotRepository.findByAssetIdOrderByIdAsc(assetId)).isNotEmpty();
+    assertThat(characterRelRepository.findCharacterIdsByAssetId(assetId)).isEmpty();
+
+    assetService.hardDelete(assetId);
+
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(snapshotRepository.findByAssetIdOrderByIdAsc(assetId)).isEmpty();
+    assertThat(characterRelRepository.findCharacterIdsByAssetId(assetId)).isEmpty();
+  }
+
+  @Test
   void recycleClearsPageBeatCoverKeepsNodeAndRestoreFills() {
     Long assetId = persistAsset("page-beat-cover").getId();
     Long arcId = persistArc();

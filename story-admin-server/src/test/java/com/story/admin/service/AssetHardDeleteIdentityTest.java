@@ -2,13 +2,11 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.CharacterIdentity;
 import com.story.admin.domain.IdentityAssetRel;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.CharacterIdentityRepository;
@@ -43,7 +41,7 @@ class AssetHardDeleteIdentityTest {
   @Autowired IdentityAssetRelRepository identityAssetRelRepository;
 
   @Test
-  void hardDeleteBlockedWhenUsedByIdentity() {
+  void hardDeleteCascadesWhenUsedByIdentity() {
     Long assetId = persistAsset("id-ref-asset").getId();
     CharacterIdentity identity = new CharacterIdentity();
     identity.setCode("ID-0099");
@@ -51,11 +49,10 @@ class AssetHardDeleteIdentityTest {
     identity = identityRepository.save(identity);
     identityAssetRelRepository.save(new IdentityAssetRel(identity.getId(), assetId));
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("怪盗女孩");
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(identityAssetRelRepository.findByAssetId(assetId)).isEmpty();
   }
 
   private Asset persistAsset(String name) {

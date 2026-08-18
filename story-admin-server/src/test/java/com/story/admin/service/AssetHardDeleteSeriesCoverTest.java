@@ -2,13 +2,11 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.SeriesStatus;
 import com.story.admin.domain.StorySeries;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetRepository;
 import com.story.admin.repository.StorySeriesRepository;
@@ -41,7 +39,7 @@ class AssetHardDeleteSeriesCoverTest {
   @Autowired StorySeriesRepository storySeriesRepository;
 
   @Test
-  void hardDeleteBlockedWhenAssetIsSeriesCover() {
+  void hardDeleteCascadesWhenAssetIsSeriesCover() {
     Long assetId = persistAsset("series-cover").getId();
     StorySeries series = new StorySeries();
     series.setCode("S000099");
@@ -49,14 +47,13 @@ class AssetHardDeleteSeriesCoverTest {
     series.setStatus(SeriesStatus.DRAFT);
     series.setCoverAssetId(assetId);
     series.setSortOrder(0);
-    storySeriesRepository.save(series);
+    series = storySeriesRepository.save(series);
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("暗夜物语")
-        .hasMessageContaining("S000099");
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(storySeriesRepository.findById(series.getId()).orElseThrow().getCoverAssetId())
+        .isNull();
   }
 
   private Asset persistAsset(String name) {

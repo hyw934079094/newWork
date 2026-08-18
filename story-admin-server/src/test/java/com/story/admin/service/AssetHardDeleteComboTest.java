@@ -2,14 +2,13 @@ package com.story.admin.service;
 
 import static com.story.admin.domain.AssetStatus.NORMAL;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.story.admin.domain.Asset;
 import com.story.admin.domain.AssetCategory;
 import com.story.admin.dto.ComboMemberRequest;
 import com.story.admin.dto.ComboUpsertRequest;
-import com.story.admin.exception.ConflictException;
 import com.story.admin.repository.AssetCategoryRepository;
+import com.story.admin.repository.AssetComboMemberRepository;
 import com.story.admin.repository.AssetRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -40,25 +39,28 @@ class AssetHardDeleteComboTest {
   @Autowired ComboService comboService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
+  @Autowired AssetComboMemberRepository comboMemberRepository;
 
   @Test
-  void hardDeleteBlockedWhenUsedInCombo() {
+  void hardDeleteCascadesWhenUsedInCombo() {
     Long assetId = persistAsset("combo-ref-asset").getId();
-    comboService.create(
-        new ComboUpsertRequest(
-            "表情组合甲",
-            "1",
-            new BigDecimal("1.0"),
-            true,
-            null,
-            List.of(new ComboMemberRequest(assetId, 1)),
-            List.of()));
+    var combo =
+        comboService.create(
+            new ComboUpsertRequest(
+                "表情组合甲",
+                "1",
+                new BigDecimal("1.0"),
+                true,
+                null,
+                List.of(new ComboMemberRequest(assetId, 1)),
+                List.of()));
 
-    assertThatThrownBy(() -> assetService.hardDelete(assetId))
-        .isInstanceOf(ConflictException.class)
-        .hasMessageContaining("表情组合甲");
+    assetService.hardDelete(assetId);
 
-    assertThat(assetRepository.findById(assetId)).isPresent();
+    assertThat(assetRepository.findById(assetId)).isEmpty();
+    assertThat(comboMemberRepository.findByAssetId(assetId)).isEmpty();
+    assertThat(comboMemberRepository.findByComboIdOrderBySortOrderAscMemberNoAsc(combo.id()))
+        .isEmpty();
   }
 
   private Asset persistAsset(String name) {
