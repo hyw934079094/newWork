@@ -170,6 +170,31 @@ class ArcReadingStreamTest {
   }
 
   @Test
+  void readingStreamSkipsEmptyBeatCoverKeepsBody() {
+    Long seriesId =
+        seriesService.create(new SeriesCreateRequest("空封面阅读流", null, null, null, null)).getId();
+    StoryArc arc = arcService.create(seriesId, new ArcCreateRequest("卷", null, null, null));
+
+    StoryPage page = pageService.create(arc.getId(), new PageCreateRequest("P1"));
+    String json =
+        "[{\"type\":\"BEAT\",\"coverAssetId\":null,\"children\":[{\"type\":\"COVER\",\"assetId\":null},{\"type\":\"BODY\",\"text\":\"空封面正文\"}]}]";
+    pageService.update(page.getId(), new PageUpdateRequest("P1", json));
+
+    ArcReadingStreamResponse stream = arcService.readingStream(arc.getId());
+    List<String> types = stream.segments().stream().map(s -> (String) s.get("type")).toList();
+    assertThat(types).containsExactly("ARC_TITLE", "PAGE_TITLE", "BODY");
+    assertThat(types).doesNotContain("IMAGE");
+
+    Map<String, Object> body =
+        stream.segments().stream()
+            .filter(s -> "BODY".equals(s.get("type")))
+            .findFirst()
+            .orElseThrow();
+    assertThat(body.get("text")).isEqualTo("空封面正文");
+    assertThat(body.get("pageId")).isEqualTo(page.getId());
+  }
+
+  @Test
   void readingStreamNotFound() {
     assertThatThrownBy(() -> arcService.readingStream(-1L))
         .isInstanceOf(ResponseStatusException.class)

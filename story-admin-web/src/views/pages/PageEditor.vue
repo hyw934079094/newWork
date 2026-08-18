@@ -549,7 +549,7 @@ async function save() {
     const visual = findVisual(item);
     if (!visual) return true;
     if (visual.type === 'COVER') {
-      return visual.assetId == null || !Number.isInteger(visual.assetId);
+      return false;
     }
     if (visual.type === 'COMBO') {
       return visual.comboId == null || !Number.isInteger(visual.comboId);
