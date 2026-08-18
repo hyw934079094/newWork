@@ -10,10 +10,12 @@ import com.story.admin.domain.AssetCategory;
 import com.story.admin.domain.CharacterProfile;
 import com.story.admin.domain.StoryArc;
 import com.story.admin.domain.StorySeries;
+import com.story.admin.dto.AiReferenceItemRequest;
 import com.story.admin.dto.ArcCreateRequest;
 import com.story.admin.dto.AssetUpdateRequest;
 import com.story.admin.dto.CharacterCreateRequest;
 import com.story.admin.dto.SeriesCreateRequest;
+import com.story.admin.repository.AiReferenceItemRepository;
 import com.story.admin.repository.AssetAssociationSnapshotRepository;
 import com.story.admin.repository.AssetCategoryRepository;
 import com.story.admin.repository.AssetCharacterRelRepository;
@@ -48,10 +50,12 @@ class AssetRecycleAssociationTest {
   @Autowired CharacterService characterService;
   @Autowired SeriesService seriesService;
   @Autowired ArcService arcService;
+  @Autowired AiReferenceService aiReferenceService;
   @Autowired AssetRepository assetRepository;
   @Autowired AssetCategoryRepository categoryRepository;
   @Autowired AssetAssociationSnapshotRepository snapshotRepository;
   @Autowired AssetCharacterRelRepository characterRelRepository;
+  @Autowired AiReferenceItemRepository aiReferenceItemRepository;
   @Autowired StorySeriesRepository storySeriesRepository;
   @Autowired StoryArcRepository storyArcRepository;
 
@@ -153,6 +157,58 @@ class AssetRecycleAssociationTest {
     assertThat(restored.getCharacterIds()).containsExactly(keep.getId());
     assertThat(storySeriesRepository.findById(series.getId()).orElseThrow().getCoverAssetId())
         .isEqualTo(assetId);
+  }
+
+  @Test
+  void recycleTwiceKeepsSnapshotsAndRestoreReattaches() {
+    Long assetId = persistAsset("recycle-twice").getId();
+    CharacterProfile character =
+        characterService.create(
+            new CharacterCreateRequest(
+                "二次回收角色", null, null, null, null, null, null, null, null, null, null, null));
+    assetService.update(
+        assetId, AssetUpdateRequest.builder().characterIds(List.of(character.getId())).build());
+
+    assetService.recycle(assetId);
+    List<AssetAssociationSnapshot> afterFirst =
+        snapshotRepository.findByAssetIdOrderByIdAsc(assetId);
+    assertThat(afterFirst).extracting(AssetAssociationSnapshot::getKind).contains("CHARACTER_REL");
+    String payload = afterFirst.get(0).getPayloadJson();
+
+    Asset recycledAgain = assetService.recycle(assetId);
+
+    assertThat(recycledAgain.getStatus()).isEqualTo(DELETED);
+    List<AssetAssociationSnapshot> afterSecond =
+        snapshotRepository.findByAssetIdOrderByIdAsc(assetId);
+    assertThat(afterSecond).hasSize(afterFirst.size());
+    assertThat(afterSecond).extracting(AssetAssociationSnapshot::getKind).contains("CHARACTER_REL");
+    assertThat(afterSecond.get(0).getPayloadJson()).isEqualTo(payload);
+
+    Asset restored = assetService.restore(assetId);
+    assertThat(restored.getStatus()).isEqualTo(NORMAL);
+    assertThat(restored.getCharacterIds()).containsExactly(character.getId());
+  }
+
+  @Test
+  void restoreTwiceDoesNotDuplicateAiRefs() {
+    Long assetId = persistAsset("restore-twice-ai").getId();
+    aiReferenceService.replaceCurrentItems(
+        List.of(new AiReferenceItemRequest(assetId, "外貌", null, null)));
+    assertThat(aiReferenceItemRepository.countByAssetId(assetId)).isEqualTo(1);
+
+    assetService.recycle(assetId);
+    assertThat(aiReferenceItemRepository.countByAssetId(assetId)).isZero();
+    assertThat(snapshotRepository.findByAssetIdOrderByIdAsc(assetId))
+        .extracting(AssetAssociationSnapshot::getKind)
+        .contains("AI_REF");
+
+    assetService.restore(assetId);
+    assertThat(aiReferenceItemRepository.countByAssetId(assetId)).isEqualTo(1);
+
+    Asset restoredAgain = assetService.restore(assetId);
+
+    assertThat(restoredAgain.getStatus()).isEqualTo(NORMAL);
+    assertThat(aiReferenceItemRepository.countByAssetId(assetId)).isEqualTo(1);
   }
 
   private Asset persistAsset(String name) {

@@ -297,7 +297,9 @@ public class AssetService {
   @Transactional
   public Asset recycle(Long id) {
     Asset asset = getRaw(id);
-    associationLifecycle.detachAll(id);
+    if (asset.getStatus() == AssetStatus.NORMAL) {
+      associationLifecycle.detachAll(id);
+    }
     asset.setStatus(AssetStatus.DELETED);
     asset.setDeletedAt(LocalDateTime.now());
     return hydrate(assetRepository.save(asset));
@@ -306,10 +308,13 @@ public class AssetService {
   @Transactional
   public Asset restore(Long id) {
     Asset asset = getRaw(id);
+    boolean fromDeleted = asset.getStatus() == AssetStatus.DELETED;
     asset.setStatus(AssetStatus.NORMAL);
     asset.setDeletedAt(null);
     asset = assetRepository.save(asset);
-    associationLifecycle.restoreAll(id);
+    if (fromDeleted) {
+      associationLifecycle.restoreAll(id);
+    }
     return hydrate(asset);
   }
 
