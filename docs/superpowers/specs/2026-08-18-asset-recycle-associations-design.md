@@ -1,6 +1,6 @@
 # 设计：素材回收断链 / 恢复挂回 / 硬删级联
 
-> 状态：已确认待实现  
+> 状态：已实现  
 > 日期：2026-08-18  
 > 范围：`story-admin-server`（主）；`story-admin-web` 仅空封面/空组合占位展示  
 > 相关：`2026-08-13-asset-module-design.md`、`2026-08-13-asset-combo-design.md`、`2026-08-17-page-beat-combo-design.md`、`2026-08-18-recycle-bulk-actions-design.md`
