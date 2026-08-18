@@ -12,6 +12,8 @@ public interface AssetComboMemberRepository extends JpaRepository<AssetComboMemb
 
   void deleteByComboId(Long comboId);
 
+  List<AssetComboMember> findByAssetId(Long assetId);
+
   boolean existsByAssetId(Long assetId);
 
   @Query(

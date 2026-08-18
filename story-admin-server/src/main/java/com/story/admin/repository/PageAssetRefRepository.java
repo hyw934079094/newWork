@@ -13,6 +13,10 @@ public interface PageAssetRefRepository extends JpaRepository<PageAssetRef, Page
 
   void deleteByPageId(Long pageId);
 
+  List<PageAssetRef> findByAssetId(Long assetId);
+
+  void deleteByAssetId(Long assetId);
+
   @Query("select distinct r.pageId from PageAssetRef r where r.assetId = :assetId")
   List<Long> findPageIdsByAssetId(@Param("assetId") Long assetId);
 }

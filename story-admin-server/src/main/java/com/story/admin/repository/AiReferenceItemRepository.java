@@ -8,6 +8,8 @@ public interface AiReferenceItemRepository extends JpaRepository<AiReferenceItem
 
   List<AiReferenceItem> findByAssetId(Long assetId);
 
+  void deleteByAssetId(Long assetId);
+
   long countByAssetId(Long assetId);
 
   List<AiReferenceItem> findBySessionIdOrderBySortOrderAsc(Long sessionId);
