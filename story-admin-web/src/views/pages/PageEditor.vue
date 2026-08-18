@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
-import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
+import { assetContentUrl, listAssets, ASSET_PAGE_SIZE, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import { listCombos, type ComboDetail } from '../../api/combo';
 import { getPage, updatePage } from '../../api/page';
@@ -60,6 +60,9 @@ const pickerKeyword = ref('');
 const pickerAssets = ref<AssetItem[]>([]);
 const pickerSelectedId = ref<number | null>(null);
 const pickerLoading = ref(false);
+const pickerLoadingMore = ref(false);
+const pickerPage = ref(0);
+const pickerTotal = ref(0);
 const pickerBeatUid = ref<string | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 
@@ -437,15 +440,39 @@ async function convertToCoverAndPick(item: TimelineItem) {
 }
 
 async function loadPickerAssets() {
+  pickerPage.value = 0;
   pickerLoading.value = true;
   try {
-    pickerAssets.value = await listAssets({
+    const data = await listAssets({
       status: 'NORMAL',
       categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
       q: pickerKeyword.value.trim() || undefined,
+      page: 0,
+      size: ASSET_PAGE_SIZE,
     });
+    pickerAssets.value = data.items;
+    pickerTotal.value = data.total;
   } finally {
     pickerLoading.value = false;
+  }
+}
+
+async function loadMorePickerAssets() {
+  if (pickerAssets.value.length >= pickerTotal.value || pickerLoadingMore.value) return;
+  pickerLoadingMore.value = true;
+  try {
+    pickerPage.value += 1;
+    const data = await listAssets({
+      status: 'NORMAL',
+      categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
+      q: pickerKeyword.value.trim() || undefined,
+      page: pickerPage.value,
+      size: ASSET_PAGE_SIZE,
+    });
+    pickerAssets.value = [...pickerAssets.value, ...data.items];
+    pickerTotal.value = data.total;
+  } finally {
+    pickerLoadingMore.value = false;
   }
 }
 
@@ -840,6 +867,10 @@ onMounted(() => {
         </button>
         <p v-if="!pickerLoading && !pickerAssets.length" class="hint picker-empty">暂无 NORMAL 素材</p>
       </div>
+      <div v-if="pickerAssets.length < pickerTotal" class="picker-more">
+        <el-button :loading="pickerLoadingMore" @click="loadMorePickerAssets">加载更多</el-button>
+        <span class="hint">已加载 {{ pickerAssets.length }} / {{ pickerTotal }}</span>
+      </div>
 
       <template #footer>
         <div class="picker-footer">
@@ -1225,6 +1256,13 @@ onMounted(() => {
   grid-column: 1 / -1;
   margin: 24px 0;
   text-align: center;
+}
+.picker-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 4px;
 }
 .picker-footer {
   display: flex;

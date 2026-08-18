@@ -13,8 +13,11 @@ import {
   replaceAssetContent,
   updateAsset,
   uploadAssets,
+  ASSET_MAX_PAGE_SIZE,
+  ASSET_PAGE_SIZE,
   type AssetItem,
   type AssetLinkType,
+  type AssetPageResponse,
   type AssetUpdatePayload,
 } from '../../api/asset';
 import { useRouter } from 'vue-router';
@@ -48,6 +51,10 @@ const batchArcs = ref<ArcItem[]>([]);
 const replaceFileInput = ref<HTMLInputElement | null>(null);
 const categories = ref<AssetCategoryItem[]>([]);
 const assets = ref<AssetItem[]>([]);
+const page = ref(0);
+const pageSize = ASSET_PAGE_SIZE;
+const total = ref(0);
+const showAll = ref(false);
 const seriesList = ref<SeriesItem[]>([]);
 const filterArcs = ref<ArcItem[]>([]);
 const formArcs = ref<ArcItem[]>([]);
@@ -162,6 +169,7 @@ function onDragEnd() {
 }
 
 async function onThumbsChange(evt: DragChangeEvent) {
+  if (!showAll.value) return;
   if (!evt.moved || selectedCategoryId.value == null) return;
   if (hasKeyword.value) {
     // 搜索中仅内存顺序，不调 API
@@ -252,10 +260,20 @@ const currentIndex = computed(() =>
 const currentAsset = computed(() =>
   currentIndex.value >= 0 ? assets.value[currentIndex.value] : null,
 );
-const canPrev = computed(() => currentIndex.value > 0);
-const canNext = computed(
-  () => currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1,
-);
+const listPosition = computed(() => {
+  if (currentIndex.value < 0) return 0;
+  if (showAll.value) return currentIndex.value + 1;
+  return page.value * pageSize + currentIndex.value + 1;
+});
+const canPrev = computed(() => {
+  if (currentIndex.value > 0) return true;
+  return !showAll.value && page.value > 0;
+});
+const canNext = computed(() => {
+  if (currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1) return true;
+  if (showAll.value || currentIndex.value < 0) return false;
+  return (page.value + 1) * pageSize < total.value;
+});
 const showSeriesFilter = computed(
   () => linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC',
 );
@@ -315,11 +333,15 @@ const persistSortScope = computed((): PersistSortScope => {
 });
 
 const canSortThumbs = computed(() => {
+  if (!showAll.value) return false;
   if (hasKeyword.value) return true;
   return persistSortScope.value !== 'none';
 });
 
 const reorderHint = computed(() => {
+  if (!showAll.value) {
+    return '分页浏览时不可拖拽排序；可点「展示全部」后排序，或仍可拖到左侧其它分类';
+  }
   if (hasKeyword.value) {
     return '搜索中顺序仅临时，刷新后恢复；仍可拖到左侧其它分类';
   }
@@ -378,52 +400,121 @@ async function loadFormArcs(seriesId: number) {
   }
 }
 
+function buildListParams(): Parameters<typeof listAssets>[0] {
+  const listParams: Parameters<typeof listAssets>[0] = {
+    categoryId: selectedCategoryId.value ?? undefined,
+    status: 'NORMAL',
+    q: search.value.trim() || undefined,
+  };
+  if (linkTypeFilter.value) {
+    listParams.linkType = linkTypeFilter.value;
+  }
+  const seriesId = asFilterId(filterSeriesId.value);
+  const arcId = asFilterId(filterArcId.value);
+  if (
+    (linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC') &&
+    seriesId != null
+  ) {
+    listParams.seriesId = seriesId;
+  }
+  if (linkTypeFilter.value === 'ARC' && arcId != null) {
+    listParams.arcId = arcId;
+  }
+  if (showCharacterFilter.value) {
+    if (typeof characterFilter.value === 'number') {
+      listParams.characterId = characterFilter.value;
+    } else if (characterFilter.value === 'unlinked' || characterFilter.value === 'all') {
+      listParams.characterFilter = characterFilter.value;
+    }
+  }
+  return listParams;
+}
+
+function applyAssetPage(data: AssetPageResponse, keepId?: number | null) {
+  assets.value = data.items;
+  total.value = data.total;
+  if (!showAll.value) {
+    page.value = data.page;
+  }
+  const preferred = keepId ?? selectedAssetId.value;
+  if (preferred != null && assets.value.some((a) => a.id === preferred)) {
+    selectedAssetId.value = preferred;
+  } else {
+    selectedAssetId.value = assets.value[0]?.id ?? null;
+  }
+}
+
+function showAllFetchSize(knownTotal: number): number {
+  return Math.min(Math.max(knownTotal || pageSize, pageSize), ASSET_MAX_PAGE_SIZE);
+}
+
+function resetToPaged() {
+  showAll.value = false;
+  page.value = 0;
+}
+
 async function loadAssets(keepId?: number | null) {
   if (selectedCategoryId.value == null) {
     assets.value = [];
     selectedAssetId.value = null;
+    total.value = 0;
     return;
   }
   loading.value = true;
   try {
-    const listParams: Parameters<typeof listAssets>[0] = {
-      categoryId: selectedCategoryId.value,
-      status: 'NORMAL',
-      q: search.value.trim() || undefined,
-    };
-    if (linkTypeFilter.value) {
-      listParams.linkType = linkTypeFilter.value;
-    }
-    const seriesId = asFilterId(filterSeriesId.value);
-    const arcId = asFilterId(filterArcId.value);
-    if (
-      (linkTypeFilter.value === 'SERIES' || linkTypeFilter.value === 'ARC') &&
-      seriesId != null
-    ) {
-      listParams.seriesId = seriesId;
-    }
-    if (linkTypeFilter.value === 'ARC' && arcId != null) {
-      listParams.arcId = arcId;
-    }
-    if (showCharacterFilter.value) {
-      if (typeof characterFilter.value === 'number') {
-        listParams.characterId = characterFilter.value;
-      } else if (characterFilter.value === 'unlinked' || characterFilter.value === 'all') {
-        listParams.characterFilter = characterFilter.value;
+    const listParams = buildListParams();
+    if (showAll.value) {
+      const probe = await listAssets({ ...listParams, page: 0, size: pageSize });
+      total.value = probe.total;
+      const fetchSize = showAllFetchSize(probe.total);
+      if (fetchSize <= pageSize) {
+        applyAssetPage(probe, keepId);
+        return;
       }
+      const data = await listAssets({ ...listParams, page: 0, size: fetchSize });
+      applyAssetPage(data, keepId);
+      return;
     }
-    assets.value = await listAssets(listParams);
-    const preferred = keepId ?? selectedAssetId.value;
-    if (preferred != null && assets.value.some((a) => a.id === preferred)) {
-      selectedAssetId.value = preferred;
-    } else {
-      selectedAssetId.value = assets.value[0]?.id ?? null;
+    let data = await listAssets({ ...listParams, page: page.value, size: pageSize });
+    if (data.items.length === 0 && data.total > 0 && page.value > 0) {
+      page.value = Math.max(0, Math.ceil(data.total / pageSize) - 1);
+      data = await listAssets({ ...listParams, page: page.value, size: pageSize });
     }
+    applyAssetPage(data, keepId);
   } catch (e) {
     ElMessage.error(apiError(e, '加载素材失败'));
   } finally {
     loading.value = false;
   }
+}
+
+async function enterShowAll() {
+  if (showAll.value) return;
+  if (total.value > 200) {
+    try {
+      await ElMessageBox.confirm(
+        `当前筛选共 ${total.value} 项，一次性加载可能较慢。确认展示全部？`,
+        '展示全部',
+        { type: 'warning' },
+      );
+    } catch {
+      return;
+    }
+  }
+  showAll.value = true;
+  await loadAssets(selectedAssetId.value);
+}
+
+async function exitShowAll() {
+  resetToPaged();
+  await loadAssets(selectedAssetId.value);
+}
+
+function onPageChange(nextPage: number) {
+  const next = nextPage - 1;
+  if (next === page.value || showAll.value) return;
+  page.value = next;
+  void loadAssets(selectedAssetId.value);
 }
 
 async function ensureSeriesForArc(arcId: number): Promise<void> {
@@ -457,7 +548,7 @@ async function syncForm() {
     form.seriesIds = [...(asset?.seriesIds ?? [])];
     form.arcIds = [...(asset?.arcIds ?? [])];
     form.characterIds = [...(asset?.characterIds ?? [])];
-    indexInput.value = currentIndex.value >= 0 ? String(currentIndex.value + 1) : '';
+    indexInput.value = listPosition.value ? String(listPosition.value) : '';
     if (form.linkType === 'ARC' && form.arcIds.length) {
       await ensureSeriesForArc(form.arcIds[0]);
     } else {
@@ -510,6 +601,7 @@ async function selectCategory(id: number) {
   if (Date.now() - dragEndedAt < 300) return;
   selectedCategoryId.value = id;
   clearChecked();
+  resetToPaged();
   await loadAssets();
 }
 
@@ -555,6 +647,7 @@ async function onFilesPicked(ev: Event) {
         ? `已上传 ${uploaded.length} 份素材，并按当前筛选自动关联`
         : `已上传 ${uploaded.length} 份素材`,
     );
+    page.value = 0;
     await loadAssets(uploaded[0]?.id ?? null);
   } catch (e) {
     ElMessage.error(apiError(e, '上传失败'));
@@ -658,26 +751,53 @@ function openLightbox() {
   lightboxVisible.value = true;
 }
 
-function goPrev() {
+async function goPrev() {
   if (!canPrev.value) return;
-  selectedAssetId.value = assets.value[currentIndex.value - 1].id;
-}
-
-function goNext() {
-  if (!canNext.value) return;
-  selectedAssetId.value = assets.value[currentIndex.value + 1].id;
-}
-
-function jumpToIndex() {
-  const n = Number.parseInt(indexInput.value, 10);
-  if (!Number.isInteger(n) || n < 1 || n > assets.value.length) {
-    ElMessage.warning(
-      assets.value.length === 0 ? '当前没有可预览的素材' : `请输入 1 到 ${assets.value.length} 的序号`,
-    );
-    indexInput.value = currentIndex.value >= 0 ? String(currentIndex.value + 1) : '';
+  if (currentIndex.value > 0) {
+    selectedAssetId.value = assets.value[currentIndex.value - 1].id;
     return;
   }
-  selectedAssetId.value = assets.value[n - 1].id;
+  if (!showAll.value && page.value > 0) {
+    page.value -= 1;
+    await loadAssets();
+    selectedAssetId.value = assets.value[assets.value.length - 1]?.id ?? null;
+  }
+}
+
+async function goNext() {
+  if (!canNext.value) return;
+  if (currentIndex.value >= 0 && currentIndex.value < assets.value.length - 1) {
+    selectedAssetId.value = assets.value[currentIndex.value + 1].id;
+    return;
+  }
+  if (!showAll.value && (page.value + 1) * pageSize < total.value) {
+    page.value += 1;
+    await loadAssets();
+    selectedAssetId.value = assets.value[0]?.id ?? null;
+  }
+}
+
+async function jumpToIndex() {
+  const n = Number.parseInt(indexInput.value, 10);
+  if (!Number.isInteger(n) || n < 1 || n > total.value) {
+    ElMessage.warning(
+      total.value === 0 ? '当前没有可预览的素材' : `请输入 1 到 ${total.value} 的序号`,
+    );
+    indexInput.value = listPosition.value ? String(listPosition.value) : '';
+    return;
+  }
+  if (showAll.value) {
+    selectedAssetId.value = assets.value[n - 1].id;
+    return;
+  }
+  const targetPage = Math.floor((n - 1) / pageSize);
+  const offset = (n - 1) % pageSize;
+  if (targetPage !== page.value) {
+    page.value = targetPage;
+    await loadAssets();
+  }
+  const item = assets.value[offset];
+  if (item) selectedAssetId.value = item.id;
 }
 
 async function saveMeta() {
@@ -778,6 +898,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 watch(search, () => {
   if (searchTimer) clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
+    resetToPaged();
     void loadAssets();
   }, 250);
 });
@@ -804,6 +925,7 @@ watch(filterSeriesId, async (sid) => {
 });
 
 watch([linkTypeFilter, filterSeriesId, filterArcId, characterFilter], () => {
+  resetToPaged();
   void loadAssets();
 });
 
@@ -908,6 +1030,14 @@ onUnmounted(() => {
           hidden
           @change="onFilesPicked"
         />
+        <el-button
+          v-if="!showAll"
+          :disabled="selectedCategoryId == null || total === 0"
+          @click="enterShowAll"
+        >
+          展示全部
+        </el-button>
+        <el-button v-else @click="exitShowAll">分页浏览</el-button>
         <el-button @click="router.push('/recycle')">回收站</el-button>
         <el-button :disabled="!checkedIds.length" @click="clearChecked">清空选择</el-button>
         <el-button type="success" plain :disabled="!checkedIds.length" @click="openBatchLinkDialog">
@@ -982,7 +1112,7 @@ onUnmounted(() => {
           </button>
           <div class="preview-meta">
             <strong>{{ currentAsset.displayName }}</strong>
-            <span>第 {{ currentIndex + 1 }} / {{ assets.length }} 份</span>
+            <span>第 {{ listPosition }} / {{ total }} 份</span>
           </div>
           <div class="nav">
             <el-button :disabled="!canPrev" @click="goPrev">上一份</el-button>
@@ -998,7 +1128,11 @@ onUnmounted(() => {
         </div>
         <div v-else class="empty-preview">当前分类暂无素材，请先上传</div>
         <p class="drag-tip">
-          将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可按当前筛选范围排序并保存。
+          {{
+            showAll
+              ? '将下方缩略图拖到左侧其它分类，即可更换分类；同分类内拖拽可按当前筛选范围排序并保存。'
+              : '分页浏览时不可拖拽排序。将缩略图拖到左侧其它分类仍可更换分类；需要排序请先「展示全部」。'
+          }}
         </p>
         <p v-if="reorderHint" class="search-reorder-hint">
           {{ reorderHint }}
@@ -1031,7 +1165,7 @@ onUnmounted(() => {
                 role="button"
                 tabindex="0"
                 :data-thumb-id="element.id"
-                :title="`${index + 1}. ${element.displayName}`"
+                :title="`${(showAll ? index : page * pageSize + index) + 1}. ${element.displayName}`"
                 @click="selectAsset(element.id)"
                 @keydown.enter.prevent="selectAsset(element.id)"
               >
@@ -1050,6 +1184,16 @@ onUnmounted(() => {
               </div>
             </template>
           </draggable>
+        </div>
+        <div v-if="!showAll" class="pager">
+          <el-pagination
+            background
+            layout="total, prev, pager, next, jumper"
+            :page-size="pageSize"
+            :current-page="page + 1"
+            :total="total"
+            @current-change="onPageChange"
+          />
         </div>
       </section>
 
@@ -1492,6 +1636,11 @@ onUnmounted(() => {
   overflow-x: auto;
   padding-bottom: 6px;
   min-height: 80px;
+}
+.pager {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
 }
 .thumbs-track {
   display: flex;

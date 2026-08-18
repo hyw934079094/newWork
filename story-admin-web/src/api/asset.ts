@@ -39,6 +39,16 @@ export interface AssetUpdatePayload {
   arcIds?: number[];
 }
 
+export interface AssetPageResponse {
+  items: AssetItem[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+export const ASSET_PAGE_SIZE = 48;
+export const ASSET_MAX_PAGE_SIZE = 5000;
+
 export function assetContentUrl(id: number, bust?: number | string): string {
   const base = `/api/assets/${id}/content`;
   return bust != null && bust !== '' ? `${base}?t=${bust}` : base;
@@ -62,8 +72,10 @@ export async function listAssets(params: {
   linkType?: AssetLinkType | '';
   seriesId?: number;
   arcId?: number;
-}): Promise<AssetItem[]> {
-  const { data } = await http.get<AssetItem[]>('/assets', { params });
+  page?: number;
+  size?: number;
+} = {}): Promise<AssetPageResponse> {
+  const { data } = await http.get<AssetPageResponse>('/assets', { params });
   return data;
 }
 

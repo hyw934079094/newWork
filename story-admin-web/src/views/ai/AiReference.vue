@@ -7,7 +7,7 @@ import {
   replaceCurrentAiReferenceItems,
   type AiReferenceItemPayload,
 } from '../../api/aiReference';
-import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
+import { assetContentUrl, listAssets, ASSET_PAGE_SIZE, type AssetItem } from '../../api/asset';
 
 interface RefRow {
   key: string;
@@ -22,6 +22,9 @@ const loading = ref(false);
 const saving = ref(false);
 const sessionName = ref('default');
 const library = ref<AssetItem[]>([]);
+const page = ref(0);
+const pageSize = ASSET_PAGE_SIZE;
+const total = ref(0);
 const selectedIds = ref<number[]>([]);
 const rows = ref<RefRow[]>([]);
 
@@ -40,23 +43,33 @@ function makeKey(assetId: number): string {
   return `${assetId}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+async function loadLibrary() {
+  const data = await listAssets({ status: 'NORMAL', page: page.value, size: pageSize });
+  library.value = data.items;
+  total.value = data.total;
+}
+
+function assetName(assetId: number, byId: Map<number, AssetItem>): string {
+  return (
+    byId.get(assetId)?.displayName ||
+    rows.value.find((r) => r.assetId === assetId)?.displayName ||
+    `#${assetId}`
+  );
+}
+
 async function load() {
   loading.value = true;
   try {
-    const [assets, session] = await Promise.all([
-      listAssets({ status: 'NORMAL' }),
-      getCurrentAiReference(),
-    ]);
-    library.value = assets;
+    const [, session] = await Promise.all([loadLibrary(), getCurrentAiReference()]);
     sessionName.value = session.name || 'default';
-    const byId = new Map(assets.map((a) => [a.id, a]));
+    const byId = new Map(library.value.map((a) => [a.id, a]));
     const ordered = [...(session.items || [])].sort(
       (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
     );
     rows.value = ordered.map((item) => ({
       key: makeKey(item.assetId),
       assetId: item.assetId,
-      displayName: byId.get(item.assetId)?.displayName || `#${item.assetId}`,
+      displayName: assetName(item.assetId, byId),
       purpose: item.purpose || '',
       note: item.note || '',
       strength: item.strength ?? null,
@@ -64,6 +77,20 @@ async function load() {
     selectedIds.value = ordered.map((i) => i.assetId);
   } catch (e) {
     ElMessage.error(apiError(e, '加载 AI 参考区失败'));
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function onPageChange(nextPage: number) {
+  const next = nextPage - 1;
+  if (next === page.value) return;
+  page.value = next;
+  loading.value = true;
+  try {
+    await loadLibrary();
+  } catch (e) {
+    ElMessage.error(apiError(e, '加载素材库失败'));
   } finally {
     loading.value = false;
   }
@@ -140,6 +167,17 @@ onMounted(load);
           </label>
         </el-checkbox-group>
         <p v-if="!library.length" class="empty">暂无素材，请先在素材管理上传</p>
+        <div class="pager">
+          <el-pagination
+            background
+            small
+            layout="total, prev, pager, next"
+            :page-size="pageSize"
+            :current-page="page + 1"
+            :total="total"
+            @current-change="onPageChange"
+          />
+        </div>
       </aside>
 
       <div class="ordered">
@@ -283,6 +321,11 @@ h3 {
 .empty {
   color: #94a3b8;
   font-size: 13px;
+}
+.pager {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
 }
 @media (max-width: 900px) {
   .layout {

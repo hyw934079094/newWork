@@ -9,7 +9,7 @@ import {
   updateCombo,
   type ComboUpsertPayload,
 } from '../../api/combo';
-import { listAssets, type AssetItem } from '../../api/asset';
+import { listAssets, ASSET_PAGE_SIZE, type AssetItem } from '../../api/asset';
 import { listCategories, type AssetCategoryItem } from '../../api/category';
 import AssetThumb from '../../components/AssetThumb.vue';
 import ComboPreviewPlayer from './ComboPreviewPlayer.vue';
@@ -38,6 +38,9 @@ const categoryFilter = ref<number | null>(null);
 const assetQuery = ref('');
 const availableAssets = ref<AssetItem[]>([]);
 const assetsLoading = ref(false);
+const assetsLoadingMore = ref(false);
+const assetPage = ref(0);
+const assetTotal = ref(0);
 
 const name = ref('');
 const remark = ref('');
@@ -51,12 +54,7 @@ const previewPlayerRef = ref<InstanceType<typeof ComboPreviewPlayer> | null>(nul
 const memberAssetIds = computed(() => new Set(members.value.map((m) => m.assetId)));
 
 const filteredAvailable = computed(() => {
-  const q = assetQuery.value.trim().toLowerCase();
-  return availableAssets.value.filter((a) => {
-    if (memberAssetIds.value.has(a.id)) return false;
-    if (!q) return true;
-    return a.displayName.toLowerCase().includes(q);
-  });
+  return availableAssets.value.filter((a) => !memberAssetIds.value.has(a.id));
 });
 
 const sequenceHints = computed(() => {
@@ -228,17 +226,43 @@ async function loadCategories() {
 }
 
 async function loadAvailableAssets() {
+  assetPage.value = 0;
   assetsLoading.value = true;
   try {
-    availableAssets.value = await listAssets({
+    const data = await listAssets({
       status: 'NORMAL',
       categoryId: categoryFilter.value ?? undefined,
       q: assetQuery.value.trim() || undefined,
+      page: 0,
+      size: ASSET_PAGE_SIZE,
     });
+    availableAssets.value = data.items;
+    assetTotal.value = data.total;
   } catch (e) {
     ElMessage.error(apiError(e, '加载素材失败'));
   } finally {
     assetsLoading.value = false;
+  }
+}
+
+async function loadMoreAvailableAssets() {
+  if (availableAssets.value.length >= assetTotal.value || assetsLoadingMore.value) return;
+  assetsLoadingMore.value = true;
+  try {
+    assetPage.value += 1;
+    const data = await listAssets({
+      status: 'NORMAL',
+      categoryId: categoryFilter.value ?? undefined,
+      q: assetQuery.value.trim() || undefined,
+      page: assetPage.value,
+      size: ASSET_PAGE_SIZE,
+    });
+    availableAssets.value = [...availableAssets.value, ...data.items];
+    assetTotal.value = data.total;
+  } catch (e) {
+    ElMessage.error(apiError(e, '加载素材失败'));
+  } finally {
+    assetsLoadingMore.value = false;
   }
 }
 
@@ -460,6 +484,12 @@ onMounted(async () => {
               </template>
             </el-table-column>
           </el-table>
+          <div v-if="availableAssets.length < assetTotal" class="picker-more">
+            <el-button :loading="assetsLoadingMore" @click="loadMoreAvailableAssets">
+              加载更多
+            </el-button>
+            <span class="muted">已加载 {{ availableAssets.length }} / {{ assetTotal }}</span>
+          </div>
         </div>
 
         <div class="selected">
@@ -627,6 +657,13 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+}
+.picker-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 0;
 }
 .member-list {
   display: flex;

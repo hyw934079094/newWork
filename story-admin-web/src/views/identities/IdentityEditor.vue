@@ -11,7 +11,7 @@ import {
   type IdentityUpsertPayload,
 } from '../../api/characterIdentity';
 import { listCharacters, type CharacterItem } from '../../api/character';
-import { listAssets, type AssetItem } from '../../api/asset';
+import { listAssets, ASSET_PAGE_SIZE, type AssetItem } from '../../api/asset';
 
 /** Backend already returns identity fields; Task 5 will formalize on CharacterItem. */
 type CharacterRow = CharacterItem & {
@@ -51,6 +51,9 @@ const characterQuery = ref('');
 
 const availableAssets = ref<AssetItem[]>([]);
 const assetsLoading = ref(false);
+const assetsLoadingMore = ref(false);
+const assetPage = ref(0);
+const assetTotal = ref(0);
 const assetQuery = ref('');
 const assetTableRef = ref<{
   clearSelection: () => void;
@@ -152,26 +155,54 @@ function onAssetSelectionChange(rows: AssetItem[]) {
   selectedAssetIds.value = [...kept, ...rows.map((r) => r.id)];
 }
 
-/** Drop recycled / non-NORMAL ghost IDs when we have an unfiltered NORMAL catalog. */
+/** Drop recycled / non-NORMAL ghost IDs when we have a complete unfiltered NORMAL catalog. */
 function pruneSelectedToLoadableNormal() {
   if (assetQuery.value.trim()) return;
+  if (availableAssets.value.length < assetTotal.value) return;
   const normalIds = new Set(availableAssets.value.map((a) => a.id));
   selectedAssetIds.value = selectedAssetIds.value.filter((id) => normalIds.has(id));
 }
 
 async function loadAvailableAssets() {
+  assetPage.value = 0;
   assetsLoading.value = true;
   try {
-    availableAssets.value = await listAssets({
+    const data = await listAssets({
       status: 'NORMAL',
       q: assetQuery.value.trim() || undefined,
+      page: 0,
+      size: ASSET_PAGE_SIZE,
     });
+    availableAssets.value = data.items;
+    assetTotal.value = data.total;
     pruneSelectedToLoadableNormal();
     await syncAssetTableSelection();
   } catch (e) {
     ElMessage.error(apiError(e, '加载素材失败'));
   } finally {
     assetsLoading.value = false;
+  }
+}
+
+async function loadMoreAvailableAssets() {
+  if (availableAssets.value.length >= assetTotal.value || assetsLoadingMore.value) return;
+  assetsLoadingMore.value = true;
+  try {
+    assetPage.value += 1;
+    const data = await listAssets({
+      status: 'NORMAL',
+      q: assetQuery.value.trim() || undefined,
+      page: assetPage.value,
+      size: ASSET_PAGE_SIZE,
+    });
+    availableAssets.value = [...availableAssets.value, ...data.items];
+    assetTotal.value = data.total;
+    pruneSelectedToLoadableNormal();
+    await syncAssetTableSelection();
+  } catch (e) {
+    ElMessage.error(apiError(e, '加载素材失败'));
+  } finally {
+    assetsLoadingMore.value = false;
   }
 }
 
@@ -400,6 +431,10 @@ onMounted(async () => {
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="contentType" label="类型" width="120" show-overflow-tooltip />
       </el-table>
+      <div v-if="availableAssets.length < assetTotal" class="picker-more">
+        <el-button :loading="assetsLoadingMore" @click="loadMoreAvailableAssets">加载更多</el-button>
+        <span class="muted">已加载 {{ availableAssets.length }} / {{ assetTotal }}</span>
+      </div>
       <p class="muted note">保存时会全量替换本本体的共用素材关联。</p>
     </div>
   </section>
@@ -465,6 +500,13 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+}
+.picker-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 0;
 }
 .member-row {
   display: flex;

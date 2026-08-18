@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { assetContentUrl, listAssets, type AssetItem } from '../../api/asset';
+import { assetContentUrl, listAssets, ASSET_PAGE_SIZE, type AssetItem } from '../../api/asset';
 import {
   addCharacterForm,
   createCharacter,
@@ -41,6 +41,9 @@ const pickerKeyword = ref('');
 const pickerAssets = ref<AssetItem[]>([]);
 const pickerSelectedIds = ref<number[]>([]);
 const pickerLoading = ref(false);
+const pickerLoadingMore = ref(false);
+const pickerPage = ref(0);
+const pickerTotal = ref(0);
 const categories = ref<AssetCategoryItem[]>([]);
 
 const previewVisible = ref(false);
@@ -214,15 +217,39 @@ async function openAssetPicker() {
 }
 
 async function loadPickerAssets() {
+  pickerPage.value = 0;
   pickerLoading.value = true;
   try {
-    pickerAssets.value = await listAssets({
+    const data = await listAssets({
       status: 'NORMAL',
       categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
       q: pickerKeyword.value.trim() || undefined,
+      page: 0,
+      size: ASSET_PAGE_SIZE,
     });
+    pickerAssets.value = data.items;
+    pickerTotal.value = data.total;
   } finally {
     pickerLoading.value = false;
+  }
+}
+
+async function loadMorePickerAssets() {
+  if (pickerAssets.value.length >= pickerTotal.value || pickerLoadingMore.value) return;
+  pickerLoadingMore.value = true;
+  try {
+    pickerPage.value += 1;
+    const data = await listAssets({
+      status: 'NORMAL',
+      categoryId: pickerCategoryId.value === 'all' ? undefined : pickerCategoryId.value,
+      q: pickerKeyword.value.trim() || undefined,
+      page: pickerPage.value,
+      size: ASSET_PAGE_SIZE,
+    });
+    pickerAssets.value = [...pickerAssets.value, ...data.items];
+    pickerTotal.value = data.total;
+  } finally {
+    pickerLoadingMore.value = false;
   }
 }
 
@@ -785,6 +812,10 @@ onMounted(load);
         </button>
         <p v-if="!pickerLoading && !pickerAssets.length" class="hint picker-empty">暂无 NORMAL 素材</p>
       </div>
+      <div v-if="pickerAssets.length < pickerTotal" class="picker-more">
+        <el-button :loading="pickerLoadingMore" @click="loadMorePickerAssets">加载更多</el-button>
+        <span class="hint">已加载 {{ pickerAssets.length }} / {{ pickerTotal }}</span>
+      </div>
 
       <template #footer>
         <div class="picker-footer">
@@ -1066,6 +1097,13 @@ onMounted(load);
   grid-column: 1 / -1;
   margin: 24px 0;
   text-align: center;
+}
+.picker-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 4px;
 }
 .picker-footer {
   display: flex;
